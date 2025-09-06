@@ -38,18 +38,26 @@ export const info: RunnerInfo = {
   rating: CatalogRating.MIXED,
 };
 
-export class Target implements ContentSource, ImageRequestHandler, PageLinkResolver {
+export class Target
+  implements ContentSource, ImageRequestHandler, PageLinkResolver
+{
   info = info;
   private client = new NetworkClient();
 
   // --- PageLinkResolver ---
-  async resolvePageSection(_link: PageLink, _sectionID: string): Promise<ResolvedPageSection> {
+  async resolvePageSection(
+    _link: PageLink,
+    _sectionID: string,
+  ): Promise<ResolvedPageSection> {
     // Not used for this resolver-only source; sections are already fully built in getSectionsForPage
     throw new Error("Method not used.");
   }
 
   // Extract an array of PageLink objects from a chapter entry
-  private extractPagesFromChapter(chap: any, groupName?: string): { url: string }[] {
+  private extractPagesFromChapter(
+    chap: any,
+    groupName?: string,
+  ): { url: string }[] {
     // If chapter itself is an array, treat as pages
     if (Array.isArray(chap)) {
       return this.normalizePagesArray(chap);
@@ -59,7 +67,8 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
       return this.normalizePagesArray(chap.pages);
     }
     // Common alternative keys at chapter root
-    if (Array.isArray(chap?.images)) return this.normalizePagesArray(chap.images);
+    if (Array.isArray(chap?.images))
+      return this.normalizePagesArray(chap.images);
     if (Array.isArray(chap?.urls)) return this.normalizePagesArray(chap.urls);
     if (Array.isArray(chap?.links)) return this.normalizePagesArray(chap.links);
     if (Array.isArray(chap?.data)) return this.normalizePagesArray(chap.data);
@@ -81,22 +90,35 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
         if (Array.isArray(selected)) return this.normalizePagesArray(selected);
         // Some manifests may nest pages under a key like 'pages' or 'images'
         if (selected && typeof selected === "object") {
-          if (Array.isArray(selected.pages)) return this.normalizePagesArray(selected.pages);
-          if (Array.isArray(selected.images)) return this.normalizePagesArray(selected.images);
-          if (Array.isArray(selected.urls)) return this.normalizePagesArray(selected.urls);
-          if (Array.isArray(selected.links)) return this.normalizePagesArray(selected.links);
-          if (Array.isArray(selected.data)) return this.normalizePagesArray(selected.data);
+          if (Array.isArray(selected.pages))
+            return this.normalizePagesArray(selected.pages);
+          if (Array.isArray(selected.images))
+            return this.normalizePagesArray(selected.images);
+          if (Array.isArray(selected.urls))
+            return this.normalizePagesArray(selected.urls);
+          if (Array.isArray(selected.links))
+            return this.normalizePagesArray(selected.links);
+          if (Array.isArray(selected.data))
+            return this.normalizePagesArray(selected.data);
           // If object values are strings or page-like objects, collect them
           const values = Object.values(selected);
-          const stringValues = values.filter((v) => typeof v === "string") as string[];
-          const objectValues = values.filter((v) => v && typeof v === "object" && !Array.isArray(v));
-          if (stringValues.length) return this.normalizePagesArray(stringValues);
+          const stringValues = values.filter(
+            (v) => typeof v === "string",
+          ) as string[];
+          const objectValues = values.filter(
+            (v) => v && typeof v === "object" && !Array.isArray(v),
+          );
+          if (stringValues.length)
+            return this.normalizePagesArray(stringValues);
           const objectUrlItems = objectValues
             .map((o: any) => o?.url ?? o?.u ?? o?.src ?? o?.link)
             .filter((u: any): u is string => typeof u === "string");
-          if (objectUrlItems.length) return this.normalizePagesArray(objectUrlItems);
+          if (objectUrlItems.length)
+            return this.normalizePagesArray(objectUrlItems);
           // Or the first array value in the object
-          const firstArray = values.find((v: any) => Array.isArray(v)) as any[] | undefined;
+          const firstArray = values.find((v: any) => Array.isArray(v)) as
+            | any[]
+            | undefined;
           if (firstArray) return this.normalizePagesArray(firstArray);
         }
       }
@@ -141,12 +163,16 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     try {
       const data = await this.fetchManifest(url);
       if (Array.isArray(data)) return this.normalizePagesArray(data);
-      if (Array.isArray(data?.images)) return this.normalizePagesArray(data.images);
-      if (Array.isArray(data?.pages)) return this.normalizePagesArray(data.pages);
+      if (Array.isArray(data?.images))
+        return this.normalizePagesArray(data.images);
+      if (Array.isArray(data?.pages))
+        return this.normalizePagesArray(data.pages);
       if (Array.isArray(data?.data)) return this.normalizePagesArray(data.data);
       if (data && typeof data === "object") {
         const values = Object.values(data);
-        const firstArray = values.find((v: any) => Array.isArray(v)) as any[] | undefined;
+        const firstArray = values.find((v: any) => Array.isArray(v)) as
+          | any[]
+          | undefined;
         if (firstArray) return this.normalizePagesArray(firstArray);
       }
     } catch {}
@@ -154,10 +180,13 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     const html = await this.fetchText(url);
     if (html) {
       const $ = load(html);
-      const imgs = $("img").toArray().map((el: any) => {
-        const src = $(el).attr("data-src") || $(el).attr("src");
-        return src ? { url: src } : null;
-      }).filter((v: { url: string } | null): v is { url: string } => !!v);
+      const imgs = $("img")
+        .toArray()
+        .map((el: any) => {
+          const src = $(el).attr("data-src") || $(el).attr("src");
+          return src ? { url: src } : null;
+        })
+        .filter((v: { url: string } | null): v is { url: string } => !!v);
       if (imgs.length) return imgs;
     }
     return [];
@@ -166,9 +195,15 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
   // Fetch raw text via NetworkClient/fetch/XMLHttpRequest
   private async fetchText(url: string): Promise<string> {
     if (this.client) {
-      const res = await this.client.get(url, { headers: { Accept: "text/html,application/json" } });
+      const res = await this.client.get(url, {
+        headers: { Accept: "text/html,application/json" },
+      });
       if (typeof res.data === "string") return res.data as string;
-      try { return JSON.stringify(res.data); } catch { return ""; }
+      try {
+        return JSON.stringify(res.data);
+      } catch {
+        return "";
+      }
     }
     const g: any = globalThis as any;
     if (typeof g.fetch === "function") {
@@ -183,7 +218,8 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
           req.open("GET", url, true);
           req.onreadystatechange = function () {
             if (req.readyState === 4) {
-              if (req.status >= 200 && req.status < 300) resolve(req.responseText);
+              if (req.status >= 200 && req.status < 300)
+                resolve(req.responseText);
               else reject(new Error(`Failed to fetch text: ${req.status}`));
             }
           };
@@ -205,7 +241,8 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
       items: [
         {
           id: "info",
-          title: "Paste a Cubari gist link (or base64) in the Browse/Search bar",
+          title:
+            "Paste a Cubari gist link (or base64) in the Browse/Search bar",
           subtitle:
             "Examples: 1) Full: https://cubari.moe/read/gist/<base64>/  2) Base64 only: <base64>",
           cover: "/assets/cubari_logo.png",
@@ -223,11 +260,18 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     if (!parsed) {
       // Attempt short-alias resolution if this looks like a cubari gist URL
       try {
-        const u = new URL(linkStr.startsWith("http") ? linkStr : `https://${linkStr}`);
+        const u = new URL(
+          linkStr.startsWith("http") ? linkStr : `https://${linkStr}`,
+        );
         const parts = u.pathname.split("/").filter(Boolean);
-        if (u.hostname.replace(/^www\./, "") === "cubari.moe" && parts[0] === "read" && parts[1] === "gist" && parts[2]) {
-          const b64 = await this.resolveAliasToBase64(u.origin + u.pathname);
-          if (b64) parsed = this.parseCubariUrl(b64);
+        if (
+          u.hostname.replace(/^www\./, "") === "cubari.moe" &&
+          parts[0] === "read" &&
+          parts[1] === "gist" &&
+          parts[2]
+        ) {
+          const slug = await this.resolveAliasToBase64(u.origin + u.pathname);
+          if (slug) parsed = this.parseCubariUrl(slug);
         }
       } catch {}
       if (!parsed) return [this.instructionsSection()];
@@ -269,9 +313,13 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     const chapters: Chapter[] = [];
     let runningIndex = 0;
     for (const [chapNo, chap] of entries as [string, any][]) {
-      const baseTitle: string | undefined = chap.title ?? chap.volume?.toString?.();
+      const baseTitle: string | undefined =
+        chap.title ?? chap.volume?.toString?.();
       const chapDate = this.parseChapterDate(chap?.last_updated);
-      const hasGroupsObject = chap.groups && typeof chap.groups === "object" && !Array.isArray(chap.groups);
+      const hasGroupsObject =
+        chap.groups &&
+        typeof chap.groups === "object" &&
+        !Array.isArray(chap.groups);
       if (hasGroupsObject) {
         const groupNames = Object.keys(chap.groups);
         // Emit a chapter per group
@@ -279,7 +327,9 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
           const chapterId = this.buildChapterId(ctx.base64Key, chapNo, g);
           chapters.push({
             chapterId,
-            title: baseTitle ? `Ch. ${chapNo} - ${baseTitle} [${g}]` : `Ch. ${chapNo} [${g}]`,
+            title: baseTitle
+              ? `Ch. ${chapNo} - ${baseTitle} [${g}]`
+              : `Ch. ${chapNo} [${g}]`,
             number: parseFloat(chapNo),
             language: manifest.lang ?? "en",
             index: runningIndex++,
@@ -321,7 +371,10 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
   }
 
   // Fetch images for a chapter
-  async getChapterData(_contentId: string, chapterId: string): Promise<ChapterData> {
+  async getChapterData(
+    _contentId: string,
+    chapterId: string,
+  ): Promise<ChapterData> {
     const { base64Key, chapter, group } = this.parseChapterId(chapterId);
     const { rawJsonUrl } = this.parseSeriesId(this.buildSeriesId(base64Key));
     const manifest = await this.fetchManifest(rawJsonUrl);
@@ -329,20 +382,29 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     if (!chap) throw new Error(`Chapter '${chapter}' not found in manifest`);
 
     // Resolve pages from either chap.pages, chap.groups[group], or a proxy link string
-    let pages = this.extractPagesFromChapter(chap, group === "." ? undefined : group);
+    let pages = this.extractPagesFromChapter(
+      chap,
+      group === "." ? undefined : group,
+    );
     if (!pages || pages.length === 0) {
       // Check if the selected group value is a string pointing to a proxy endpoint
-      const sel = this.selectGroupValue(chap, group === "." ? undefined : group);
+      const sel = this.selectGroupValue(
+        chap,
+        group === "." ? undefined : group,
+      );
       if (typeof sel === "string") {
         pages = await this.fetchProxyPages(sel);
       }
     }
     if (!pages || pages.length === 0) {
-      const availableGroups = chap?.groups && !Array.isArray(chap.groups)
-        ? Object.keys(chap.groups).join(", ")
-        : (Array.isArray(chap?.groups) ? "(unnamed array)" : "none");
+      const availableGroups =
+        chap?.groups && !Array.isArray(chap.groups)
+          ? Object.keys(chap.groups).join(", ")
+          : Array.isArray(chap?.groups)
+            ? "(unnamed array)"
+            : "none";
       throw new Error(
-        `Group/page list not found in chapter. Requested group='${group}'. Available groups: ${availableGroups}`
+        `Group/page list not found in chapter. Requested group='${group}'. Available groups: ${availableGroups}`,
       );
     }
     return { pages };
@@ -379,8 +441,8 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
       // If still not parsed, try short-alias fetch
       if (!parsed && /cubari\.moe\/.+\/read\/gist\//.test(q)) {
         try {
-          const b64 = await this.resolveAliasToBase64(q);
-          if (b64) parsed = this.parseCubariUrl(b64);
+          const slug = await this.resolveAliasToBase64(q);
+          if (slug) parsed = this.parseCubariUrl(slug);
         } catch {}
       }
       if (!parsed) {
@@ -388,7 +450,8 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
           id: "cubari_invalid",
           title: "Unsupported Cubari URL",
           cover: "/assets/cubari_logo.png",
-          subtitle: "Paste either the full Cubari gist link or just the base64 key.",
+          subtitle:
+            "Paste either the full Cubari gist link or just the base64 key.",
         };
         return { results: [item], isLastPage: true };
       }
@@ -433,27 +496,14 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     return (anyLink?.url as string | undefined) ?? (link as any)?.id ?? "";
   }
 
-  private base64Decode(input: string): string {
-    // Try atob (JSCore), then Buffer (Node), else throw
-    try {
-      // @ts-ignore
-      if (typeof atob === "function") return atob(input);
-    } catch {}
-    try {
-      // @ts-ignore
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const Buf = (globalThis as any).Buffer ?? require("buffer").Buffer;
-      return Buf.from(input, "base64").toString("utf8");
-    } catch {
-      throw new Error("Base64 decode not available in this environment");
-    }
-  }
-
-  private parseCubariUrl(url: string):
-    | { base64Key: string; rawJsonUrl: string; chapter?: string; group?: string }
-    | null {
-    // Accept either a full Cubari URL or just the base64 key
-    let base64Key: string | null = null;
+  private parseCubariUrl(url: string): {
+    base64Key: string;
+    rawJsonUrl: string;
+    chapter?: string;
+    group?: string;
+  } | null {
+    // Accept either a full Cubari URL or just the slug
+    let slug: string | null = null;
     let chapter: string | undefined;
     let group: string | undefined;
 
@@ -472,59 +522,30 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
 
     if (asUrl && asUrl.hostname.replace(/^www\./, "") === "cubari.moe") {
       const parts = asUrl.pathname.split("/").filter(Boolean);
-      // Expect: ["read","gist","<b64>","<chapter>","<group>"]
+      // Expect: ["read","gist","<slug>","<chapter>","<group>"]
       if (parts[0] === "read" && parts[1] === "gist" && parts[2]) {
-        let slug = parts[2];
+        slug = parts[2];
         chapter = parts[3];
         group = parts[4];
-        // If slug is not base64, treat it as a short alias and use Cubari API
-        if (!this.isBase64Url(slug)) {
-          base64Key = slug;
-          const rawJsonUrl = `https://cubari.moe/api/gist/${slug}.json`;
-          return { base64Key, rawJsonUrl, chapter, group };
-        }
-        base64Key = slug;
       } else {
         return null;
       }
     }
 
-    // If not a URL or not matched, treat input itself
-    if (!base64Key) {
+    // If not a URL or not matched, treat input as slug
+    if (!slug) {
       const candidate = url.trim();
-      if (this.isBase64Url(candidate)) {
-        base64Key = candidate;
-      } else if (/^[A-Za-z0-9_-]+$/.test(candidate)) {
-        // Accept bare alias token
-        base64Key = candidate;
-        const rawJsonUrl = `https://cubari.moe/api/gist/${candidate}.json`;
-        return { base64Key, rawJsonUrl };
+      if (/^[A-Za-z0-9_=-]+$/.test(candidate)) {
+        slug = candidate;
       } else {
         return null;
       }
     }
 
-    // Convert base64url to base64 if necessary and decode
-    const normalized = this.base64UrlToStd(base64Key);
-    const decoded = this.base64Decode(normalized);
+    // Use Cubari's API endpoint for both short aliases and base64 slugs
+    const rawJsonUrl = `https://cubari.moe/read/api/gist/series/${slug}/`;
 
-    // Build raw JSON URL from decoded path
-    let rawJsonUrl: string | null = null;
-    if (decoded.startsWith("raw/")) {
-      rawJsonUrl = `https://raw.githubusercontent.com/${decoded.substring(4)}`;
-    } else if (
-      decoded.startsWith("raw.githubusercontent.com/") ||
-      decoded.startsWith("https://raw.githubusercontent.com/")
-    ) {
-      rawJsonUrl = decoded.startsWith("https://")
-        ? decoded
-        : `https://${decoded}`;
-    } else {
-      // Unknown format
-      return null;
-    }
-
-    return { base64Key, rawJsonUrl, chapter, group };
+    return { base64Key: slug, rawJsonUrl, chapter, group };
   }
 
   // Because parseCubariUrl is sync, provide an async resolver to be used by callers when alias is suspected.
@@ -532,9 +553,9 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     try {
       const html = await this.fetchText(url);
       if (!html) return null;
-      // Look for an embedded /read/gist/<base64>/ occurrence in the HTML
-      const m = html.match(/\bread\/gist\/([A-Za-z0-9_-]+)\b/);
-      if (m && m[1] && this.isBase64Url(m[1])) return m[1];
+      // Look for an embedded /read/gist/<slug>/ occurrence in the HTML
+      const m = html.match(/\bread\/gist\/([A-Za-z0-9_=-]+)\b/);
+      if (m && m[1]) return m[1];
       return null;
     } catch {
       return null;
@@ -542,36 +563,38 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
   }
 
   private isBase64Url(s: string): boolean {
-    return /^[A-Za-z0-9_-]+={0,2}$/.test(s);
+    return /^[A-Za-z0-9_=-]+$/.test(s);
   }
 
-  private base64UrlToStd(s: string): string {
-    const pad = s.length % 4 === 2 ? "==" : s.length % 4 === 3 ? "=" : s.length % 4 === 1 ? "=" : "";
-    return s.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  private buildSeriesId(slug: string) {
+    return `gist|${slug}`;
   }
 
-  private buildSeriesId(base64Key: string) {
-    return `gist|${base64Key}`;
-  }
-
-  private parseSeriesId(contentId: string): { base64Key: string; rawJsonUrl: string } {
+  private parseSeriesId(contentId: string): {
+    base64Key: string;
+    rawJsonUrl: string;
+  } {
     if (!contentId.startsWith("gist|")) {
-      throw new Error("Unsupported content id; expected gist|<base64>");
+      throw new Error("Unsupported content id; expected gist|<slug>");
     }
-    const base64Key = contentId.substring(5);
-    const decoded = this.base64Decode(base64Key);
-    const rawPath = decoded.startsWith("raw/") ? decoded.substring(4) : decoded;
-    const rawJsonUrl = `https://raw.githubusercontent.com/${rawPath}`;
-    return { base64Key, rawJsonUrl };
+    const slug = contentId.substring(5);
+    const rawJsonUrl = `https://cubari.moe/read/api/gist/series/${slug}/`;
+    return { base64Key: slug, rawJsonUrl };
   }
 
-  private buildChapterId(base64Key: string, chapter: string, group: string) {
-    return `gist|${base64Key}|${chapter}|${group}`;
+  private buildChapterId(slug: string, chapter: string, group: string) {
+    return `gist|${slug}|${chapter}|${group}`;
   }
 
-  private parseChapterId(chapterId: string): { base64Key: string; chapter: string; group: string } {
+  private parseChapterId(chapterId: string): {
+    base64Key: string;
+    chapter: string;
+    group: string;
+  } {
     if (!chapterId.startsWith("gist|")) {
-      throw new Error("Unsupported chapter id; expected gist|<base64>|<chapter>|<group>");
+      throw new Error(
+        "Unsupported chapter id; expected gist|<slug>|<chapter>|<group>",
+      );
     }
     const parts = chapterId.split("|");
     if (parts.length < 4) throw new Error("Invalid Cubari chapter id format");
@@ -596,8 +619,11 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
     // Fallback for local Node builds/tests
     const g: any = globalThis as any;
     if (typeof g.fetch === "function") {
-      const res = await g.fetch(url, { headers: { Accept: "application/json" } });
-      if (!res.ok) throw new Error(`Failed to fetch Cubari manifest: ${res.status}`);
+      const res = await g.fetch(url, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok)
+        throw new Error(`Failed to fetch Cubari manifest: ${res.status}`);
       const text = await res.text();
       try {
         return JSON.parse(text);
@@ -615,11 +641,16 @@ export class Target implements ContentSource, ImageRequestHandler, PageLinkResol
           req.setRequestHeader("Accept", "application/json");
           req.onreadystatechange = function () {
             if (req.readyState === 4) {
-              if (req.status >= 200 && req.status < 300) resolve(req.responseText);
-              else reject(new Error(`Failed to fetch Cubari manifest: ${req.status}`));
+              if (req.status >= 200 && req.status < 300)
+                resolve(req.responseText);
+              else
+                reject(
+                  new Error(`Failed to fetch Cubari manifest: ${req.status}`),
+                );
             }
           };
-          req.onerror = () => reject(new Error("Network error while fetching Cubari manifest"));
+          req.onerror = () =>
+            reject(new Error("Network error while fetching Cubari manifest"));
           req.send();
         } catch (e) {
           reject(e);

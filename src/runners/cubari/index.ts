@@ -322,15 +322,17 @@ export class Target
         typeof chap.groups === "object" &&
         !Array.isArray(chap.groups);
       if (hasGroupsObject) {
-        const groupNames = Object.keys(chap.groups);
+        const groupEntries = Object.entries(chap.groups);
         // Emit a chapter per group
-        for (const g of groupNames) {
-          const chapterId = this.buildChapterId(ctx.base64Key, chapNo, g);
+        for (const [groupId, groupValue] of groupEntries) {
+          // Use the group name from manifest.groups if available, otherwise fall back to groupId
+          const groupName = manifest.groups?.[groupId] || groupId;
+          const chapterId = this.buildChapterId(ctx.base64Key, chapNo, groupId);
           chapters.push({
             chapterId,
             title: baseTitle
-              ? `Ch. ${chapNo} - ${baseTitle} [${g}]`
-              : `Ch. ${chapNo} [${g}]`,
+              ? `Ch. ${chapNo} - ${baseTitle} [${groupName}]`
+              : `Ch. ${chapNo} [${groupName}]`,
             number: parseFloat(chapNo),
             language: manifest.lang ?? "en",
             index: runningIndex++,

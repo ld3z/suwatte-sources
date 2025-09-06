@@ -1,0 +1,8 @@
+# Dependencies
+node_modules/
+
+# Suwatte Test Tool / local site bundle
+stt/
+
+# Build output
+/dist/

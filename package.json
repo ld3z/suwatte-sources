@@ -1,0 +1,38 @@
+{
+  "name": "suwatte-sources",
+  "version": "1.0.0",
+  "description": "Custom Suwatte sources (including Cubari)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "daisuke build",
+    "serve": "daisuke serve",
+    "dev": "nodemon",
+    "prep": "rimraf dist && tsc",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "suwatte",
+    "daisuke",
+    "manga",
+    "cubari"
+  ],
+  "author": "",
+  "license": "MIT",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "dependencies": {
+    "@suwatte/cli": "^2.0.7",
+    "@suwatte/daisuke": "^3.0.8",
+    "@suwatte/validate": "^3.0.0",
+    "cheerio": "^1.1.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  },
+  "stt": {
+    "listName": "ldez's Sources"
+  }
+}

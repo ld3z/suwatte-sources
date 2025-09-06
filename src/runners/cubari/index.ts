@@ -315,7 +315,8 @@ export class Target
     for (const [chapNo, chap] of entries as [string, any][]) {
       const baseTitle: string | undefined =
         chap.title ?? chap.volume?.toString?.();
-      const chapDate = this.parseChapterDate(chap?.last_updated);
+      // Use release_date[0] as it's the format in the JSON
+      const chapDate = this.parseChapterDate(chap?.release_date?.[0]);
       const hasGroupsObject =
         chap.groups &&
         typeof chap.groups === "object" &&

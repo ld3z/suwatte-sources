@@ -30,7 +30,7 @@ import { load } from "cheerio";
 export const info: RunnerInfo = {
   id: "org.cubari",
   name: "Cubari",
-  version: 0.1,
+  version: 0.2,
   website: "https://cubari.moe",
   supportedLanguages: ["en_US"],
   thumbnail: "cubari_logo.png",

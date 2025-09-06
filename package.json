@@ -16,10 +16,9 @@
     "manga",
     "cubari"
   ],
-  "author": "",
+  "author": "ldez",
   "license": "MIT",
   "private": true,
-  "packageManager": "pnpm@10.15.0",
   "dependencies": {
     "@suwatte/cli": "^2.0.7",
     "@suwatte/daisuke": "^3.0.8",

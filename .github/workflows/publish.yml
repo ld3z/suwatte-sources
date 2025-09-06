@@ -32,7 +32,7 @@ jobs:
           version: 10
 
       - name: Install deps
-        run: pnpm install --frozen-lockfile=false
+        run: pnpm install
 
       - name: Build Sources List
         run: pnpm run build

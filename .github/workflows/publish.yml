@@ -37,6 +37,9 @@ jobs:
       - name: Build Sources List
         run: pnpm run build
 
+      - name: Replace Image Source
+        run: sed -i 's|/assets/cubari_logo.png|https://ld3z.github.io/suwatte-sources/assets/cubari_logo.png|g' stt/index.html
+
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:

@@ -20,12 +20,8 @@ import {
 } from "@suwatte/daisuke";
 import { load } from "cheerio";
 
-// Cubari source (scaffold)
+// Cubari source
 // Direct-link resolver for Cubari gist-based JSON links.
-// Supported URLs (initially):
-// - https://cubari.moe/read/gist/<base64_of_"raw/<owner>/<repo_or_gist>/<branch_or_path>/file.json">/
-// Optional chapter/group segments are supported: /<chapter>/<group>/
-// NOTE: Cubari short aliases (e.g., /read/gist/OPM/) are not supported in this initial version.
 
 export const info: RunnerInfo = {
   id: "org.cubari",

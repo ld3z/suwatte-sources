@@ -253,6 +253,48 @@ function parseChapterDate(input: unknown): Date {
   return new Date();
 }
 
+// Find a usable release date candidate from various Cubari/MangaDex shapes
+function getReleaseDateCandidate(releaseDate: any): unknown {
+  const rd = releaseDate;
+  if (rd == null) return undefined;
+  if (typeof rd === "number" || typeof rd === "string") return rd;
+  if (Array.isArray(rd)) {
+    // Prefer a numeric or numeric-string entry; otherwise any parseable date string
+    for (const v of rd) {
+      if (typeof v === "number") return v;
+      if (typeof v === "string") {
+        const n = Number(v);
+        if (!Number.isNaN(n)) return v;
+        const d = new Date(v);
+        if (!Number.isNaN(d.getTime())) return v;
+      }
+    }
+    return undefined;
+  }
+  if (typeof rd === "object") {
+    const values = Object.values(rd);
+    const msValues = values
+      .flatMap((v: any) => {
+        if (typeof v === "number" || typeof v === "string") {
+          return [parseChapterDate(v).getTime()];
+        }
+        if (Array.isArray(v)) {
+          return v.map((x: any) => parseChapterDate(x).getTime());
+        }
+        if (v && typeof v === "object") {
+          return Object.values(v).map((x: any) => parseChapterDate(x).getTime());
+        }
+        return [] as number[];
+      })
+      .filter((ms: any) => typeof ms === "number" && !Number.isNaN(ms));
+    if (msValues.length) {
+      // Use the earliest date among provided values
+      return Math.min(...msValues);
+    }
+  }
+  return undefined;
+}
+
 export function manifestToChapters(
   type: "gist" | "mangadex",
   id: string,
@@ -265,7 +307,7 @@ export function manifestToChapters(
   for (const [chapNo, chap] of entries as [string, any][]) {
     const baseTitle: string | undefined =
       chap.title ?? chap.volume?.toString?.();
-    const chapDate = parseChapterDate(chap?.release_date?.[0]);
+    const chapDate = parseChapterDate(getReleaseDateCandidate(chap?.release_date));
     const hasGroupsObject =
       chap.groups &&
       typeof chap.groups === "object" &&

@@ -152,10 +152,6 @@ export class Target
     return { pages };
   }
 
-  async getTags?(): Promise<Property[]> {
-    return [];
-  }
-
   async getDirectory(query: DirectoryRequest): Promise<PagedResult> {
     const q = (query.query ?? "").trim();
     console.log(`Cubari search query: ${q}`);

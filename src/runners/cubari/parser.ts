@@ -23,7 +23,7 @@ export function parseCubariUrl(
   | {
       id: string;
       rawJsonUrl: string;
-      type: "gist" | "mangadex";
+      type: "gist" | "mangadex" | "weebcentral";
       chapter?: string;
       group?: string;
     }
@@ -32,7 +32,7 @@ export function parseCubariUrl(
   let slug: string | null = null;
   let chapter: string | undefined;
   let group: string | undefined;
-  let type: "gist" | "mangadex" | null = null;
+  let type: "gist" | "mangadex" | "weebcentral" | null = null;
 
   const asUrl = (() => {
     try {
@@ -61,6 +61,11 @@ export function parseCubariUrl(
         chapter = parts[3];
         group = parts[4];
         type = "mangadex";
+      } else if (parts[0] === "read" && parts[1] === "weebcentral" && parts[2]) {
+        slug = parts[2];
+        chapter = parts[3];
+        group = parts[4];
+        type = "weebcentral";
       } else {
         return null;
       }
@@ -93,11 +98,11 @@ export function parseCubariUrl(
         chapter = parts2[3];
         group = parts2[4];
         type = "gist";
-      } else if (parts2[0] === "read" && parts2[1] === "mangadex" && parts2[2]) {
+      } else if (parts2[0] === "read" && parts2[1] === "weebcentral" && parts2[2]) {
         slug = parts2[2];
         chapter = parts2[3];
         group = parts2[4];
-        type = "mangadex";
+        type = "weebcentral";
       }
     } else if (host2 === "mangadex.org") {
       // Support MangaDex series URLs
@@ -153,6 +158,13 @@ export async function resolveShortUrl(
     ) {
       const slug = await resolveAliasToBase64(url.origin + url.pathname, fetcher);
       if (slug) return parseCubariUrl(slug);
+    } else if (
+      url.hostname.replace(/^www\./, "") === "cubari.moe" &&
+      parts[0] === "read" &&
+      parts[1] === "weebcentral" &&
+      parts[2]
+    ) {
+      return parseCubariUrl(url.origin + url.pathname);
     }
   } catch (e) {
     console.error("Error resolving short URL", e);
@@ -160,27 +172,27 @@ export async function resolveShortUrl(
   return null;
 }
 
-export function buildSeriesId(type: "gist" | "mangadex", slug: string) {
+export function buildSeriesId(type: "gist" | "mangadex" | "weebcentral", slug: string) {
   return `${type}|${slug}`;
 }
 
 export function parseSeriesId(contentId: string): {
   id: string;
   rawJsonUrl: string;
-  type: "gist" | "mangadex";
+  type: "gist" | "mangadex" | "weebcentral";
 } {
   const parts = contentId.split("|");
-  if (parts.length < 2 || (parts[0] !== "gist" && parts[0] !== "mangadex")) {
-    throw new Error("Unsupported content id; expected gist|<slug> or mangadex|<uuid>");
+  if (parts.length < 2 || (parts[0] !== "gist" && parts[0] !== "mangadex" && parts[0] !== "weebcentral")) {
+    throw new Error("Unsupported content id; expected (gist|mangadex|weebcentral)|<slug>");
   }
-  const type = parts[0] as "gist" | "mangadex";
+  const type = parts[0] as "gist" | "mangadex" | "weebcentral";
   const slug = parts[1];
   const rawJsonUrl = `https://cubari.moe/read/api/${type}/series/${slug}/`;
   return { id: slug, rawJsonUrl, type };
 }
 
 export function buildChapterId(
-  type: "gist" | "mangadex",
+  type: "gist" | "mangadex" | "weebcentral",
   slug: string,
   chapter: string,
   group: string
@@ -190,17 +202,17 @@ export function buildChapterId(
 
 export function parseChapterId(chapterId: string): {
   id: string;
-  type: "gist" | "mangadex";
+  type: "gist" | "mangadex" | "weebcentral";
   chapter: string;
   group: string;
 } {
   const parts = chapterId.split("|");
-  if (parts.length < 4 || (parts[0] !== "gist" && parts[0] !== "mangadex")) {
+  if (parts.length < 4 || (parts[0] !== "gist" && parts[0] !== "mangadex" && parts[0] !== "weebcentral")) {
     throw new Error(
-      "Unsupported chapter id; expected (gist|mangadex)|<slug>|<chapter>|<group>"
+      "Unsupported chapter id; expected (gist|mangadex|weebcentral)|<slug>|<chapter>|<group>"
     );
   }
-  const type = parts[0] as "gist" | "mangadex";
+  const type = parts[0] as "gist" | "mangadex" | "weebcentral";
   return { id: parts[1], type, chapter: parts[2], group: parts[3] };
 }
 
@@ -218,7 +230,6 @@ export function manifestToContent(
     cover,
     summary: manifest.description ?? undefined,
     creators: creators.length ? creators : undefined,
-    properties: [],
   };
 }
 
@@ -296,7 +307,7 @@ function getReleaseDateCandidate(releaseDate: any): unknown {
 }
 
 export function manifestToChapters(
-  type: "gist" | "mangadex",
+  type: "gist" | "mangadex" | "weebcentral",
   id: string,
   manifest: any
 ): Chapter[] {

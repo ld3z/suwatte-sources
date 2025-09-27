@@ -110,8 +110,10 @@ export async function getSeriesById(
   client?: SimpleNetworkClient,
 ): Promise<Content | null> {
   try {
+    // Try the detailed page API first
     const apiUrl = `https://atsu.moe/api/manga/page?id=${rawId}`;
     const detailResponse = await fetchText(apiUrl, client);
+
 
     if (!detailResponse) {
       throw new Error("Empty response from detailed API");
@@ -119,6 +121,24 @@ export async function getSeriesById(
 
     const detailedData: any = JSON.parse(detailResponse);
     const mangaData = (detailedData as any)?.mangaPage || detailedData;
+
+    // Attempt to enrich/merge chapters from both detailed and info endpoints.
+    // The detailed API is preferred for richer metadata, but the lightweight
+    // info endpoint currently contains the correct chapter list for some series.
+    try {
+      const infoUrl = `https://atsu.moe/api/manga/info?mangaId=${rawId}`;
+      const infoResp = await fetchText(infoUrl, client);
+      if (infoResp) {
+        const infoData = JSON.parse(infoResp);
+        if (infoData?.chapters && Array.isArray(infoData.chapters) && infoData.chapters.length > 0) {
+          const detailedChapters = Array.isArray(mangaData?.chapters) ? mangaData.chapters : [];
+          // Merge lists, preferring detailed entries when duplicates exist.
+          mangaData.chapters = mergeChapterLists(detailedChapters, infoData.chapters);
+        }
+      }
+    } catch {
+      // ignore failures and continue with whatever we have
+    }
 
     if (mangaData?.title) {
       const synopsis = mangaData.synopsis;
@@ -222,29 +242,123 @@ export async function searchManga(
   }
 }
 
+export function mergeChapterLists(detailed?: any[], info?: any[]): any[] {
+  // Combine info first then detailed so detailed items overwrite info items for same ids.
+  const combined = [...(info ?? []), ...(detailed ?? [])];
+
+
+  const map = new Map<string, any>();
+  for (const c of combined) {
+    if (!c) continue;
+    const id = c.id ?? c.chapterId ?? c._id ?? String(c.number ?? c.index ?? Math.random());
+    map.set(id, c);
+  }
+
+  const arr = Array.from(map.values());
+
+
+  // Sort by numeric index/number descending (newest-first) when available.
+  arr.sort((a: any, b: any) => {
+    const ai = Number(a?.index ?? a?.number ?? 0);
+    const bi = Number(b?.index ?? b?.number ?? 0);
+    if (bi !== ai) return bi - ai;
+    return String(b?.id ?? "").localeCompare(String(a?.id ?? ""));
+  });
+
+  return arr;
+}
+
 export function convertApiChapters(apiChapters: any[], contentId: string): Chapter[] {
   if (!apiChapters || apiChapters.length === 0) {
     return [];
   }
 
-  // Sort chapters by number in DESCENDING order (newest first)
-  const sortedByNumber = [...apiChapters].sort((a, b) => {
-    const numA = a.number || 0;
-    const numB = b.number || 0;
-    return numB - numA;
+
+  // Detect what fields are available on the chapters returned by different endpoints.
+  const hasIndex = apiChapters.some((c: any) => c.index !== undefined && c.index !== null);
+  const hasNumber = apiChapters.some((c: any) => c.number !== undefined && c.number !== null);
+
+  // Create a stable copy and sort newest-first.
+  const copy = [...apiChapters];
+
+  if (hasIndex) {
+    copy.sort((a: any, b: any) => Number(b.index ?? 0) - Number(a.index ?? 0));
+  } else if (hasNumber) {
+    copy.sort((a: any, b: any) => Number(b.number ?? 0) - Number(a.number ?? 0));
+  } else {
+    // If no numeric ordering is provided, assume the array is oldest->newest and reverse it.
+    copy.reverse();
+  }
+
+  const result = copy.map((chapter: any, idx: number) => {
+    // Prefer explicit id fields, fall back to generated values if missing.
+    const id = chapter.id ?? chapter._id ?? String(chapter.slug ?? chapter.title ?? idx);
+    const chapterNumber =
+      chapter.number !== undefined && chapter.number !== null
+        ? Number(chapter.number)
+        : hasIndex && chapter.index !== undefined && chapter.index !== null
+        ? Number(chapter.index)
+        : idx + 1;
+
+    // Robust date parsing with fallbacks.
+    let dateObj: Date | undefined;
+
+    // Try common fields first
+    if (chapter.createdAt !== undefined && chapter.createdAt !== null) {
+      // Accept numbers or strings
+      if (typeof chapter.createdAt === "number") {
+        dateObj = new Date(chapter.createdAt);
+      } else {
+        dateObj = parseDateLike(String(chapter.createdAt));
+        if (!dateObj) {
+          const n = Number(chapter.createdAt);
+          if (!Number.isNaN(n)) dateObj = new Date(n);
+        }
+      }
+    }
+
+    if (!dateObj && chapter.publishedAt !== undefined && chapter.publishedAt !== null) {
+      if (typeof chapter.publishedAt === "number") {
+        dateObj = new Date(chapter.publishedAt);
+      } else {
+        dateObj = parseDateLike(String(chapter.publishedAt));
+        if (!dateObj) {
+          const n = Number(chapter.publishedAt);
+          if (!Number.isNaN(n)) dateObj = new Date(n);
+        }
+      }
+    }
+
+    // Some endpoints may expose UNIX timestamps in seconds under different keys
+    if (!dateObj && (chapter.timestamp !== undefined && chapter.timestamp !== null)) {
+      const n = Number(chapter.timestamp);
+      if (!Number.isNaN(n)) {
+        // Heuristic: if value looks like seconds (<= 1e10), convert to ms
+        dateObj = n > 1e10 ? new Date(n) : new Date(n * 1000);
+      }
+    }
+
+    // Final deterministic fallback: generate a stable date based on index so key exists
+    if (!dateObj) {
+      // Use epoch + index seconds so serialized dates are valid ISO strings and deterministic
+      dateObj = new Date(1000 * idx);
+    }
+
+    return {
+      id,
+      chapterId: id,
+      number: chapterNumber,
+      title: chapter.title || `Chapter ${chapterNumber}`,
+      date: dateObj,
+      language: "en",
+      index: idx,
+      pageCount: chapter.pageCount ?? chapter.pages ?? 0,
+      progress: null,
+    } as Chapter;
   });
 
-  return sortedByNumber.map((chapter, index) => ({
-    id: chapter.id,
-    chapterId: chapter.id,
-    number: chapter.number || (index + 1),
-    title: chapter.title || `Chapter ${chapter.number || (index + 1)}`,
-    date: new Date(chapter.createdAt),
-    language: 'en',
-    index: index,
-    pageCount: chapter.pageCount || 0,
-    progress: null,
-  }));
+
+  return result;
 }
 
 export async function getChapterData(

@@ -19,7 +19,6 @@ import {
 import { INFO } from "./constants";
 import {
   buildSeriesId,
-  parseAtsuUrl,
   parseSeriesId,
   extractHomeSectionsFromPrefetch,
   getSeriesById,
@@ -142,22 +141,7 @@ export class Target
       };
     }
 
-    // Try URL parsing first for direct links
-    const parsed = parseAtsuUrl(q);
-    if (parsed) {
-      const contentId = buildSeriesId(parsed.slug);
-      const content = await getSeriesById(parsed.slug, this.client);
-      if (content) {
-        const item: Highlight = {
-          id: contentId,
-          title: content.title || "Atsumaru Series",
-          cover: content.cover || "/assets/cubari_logo.png",
-          subtitle: content.summary,
-          properties: content.properties || [],
-        } as Highlight;
-        return { results: [item], isLastPage: true };
-      }
-    }
+    // Direct link resolution removed; rely solely on the search API
 
     // Otherwise, use search API
     try {

@@ -18,34 +18,6 @@ import {
   SearchResponse,
 } from "./types";
 
-export type AtsuParsed = {
-  slug: string;
-  seriesUrl: string;
-};
-
-export function parseAtsuUrl(input: string): AtsuParsed | null {
-  const s = input.trim();
-  const u = (() => {
-    try {
-      return new URL(s);
-    } catch {
-      try {
-        return new URL("https://" + s);
-      } catch {
-        return null;
-      }
-    }
-  })();
-  if (!u) return null;
-  const host = u.hostname.replace(/^www\./, "");
-  if (host !== "atsu.moe") return null;
-  const parts = u.pathname.split("/").filter(Boolean);
-  if (parts.length >= 2 && (parts[0] === "series" || parts[0] === "manga")) {
-    const slug = parts[1];
-    return { slug, seriesUrl: new URL(`/series/${slug}`, u.origin).toString() };
-  }
-  return null;
-}
 
 export function buildSeriesId(slug: string) {
   return `atsu|${slug}`;

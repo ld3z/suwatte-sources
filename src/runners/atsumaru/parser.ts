@@ -246,7 +246,15 @@ export async function searchManga(
 ): Promise<SearchResponse | null> {
   try {
     const q = query.trim();
-    const qLower = q.toLowerCase();
+    const normalize = (s: string) =>
+      (s || "")
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "") // strip diacritics
+        .toLowerCase()
+        .replace(/['’`´]/g, "") // strip apostrophes/backticks/acute
+        .replace(/[^a-z0-9]+/g, " ") // collapse punctuation to spaces
+        .trim();
+    const nq = normalize(q);
     const encodedQuery = encodeURIComponent(q);
     if (!encodedQuery) return null;
 
@@ -288,17 +296,17 @@ export async function searchManga(
     const hasExact = (hits: any[]): boolean =>
       hits?.some((h: any) => {
         const d = h?.document || {};
-        const t1 = String(d.englishTitle || "").toLowerCase();
-        const t2 = String(d.title || "").toLowerCase();
-        return t1 === qLower || t2 === qLower;
+        const t1 = normalize(String(d.englishTitle || ""));
+        const t2 = normalize(String(d.title || ""));
+        return t1 === nq || t2 === nq;
       }) ?? false;
 
     const hasPrefix = (hits: any[]): boolean =>
       hits?.some((h: any) => {
         const d = h?.document || {};
-        const t1 = String(d.englishTitle || "").toLowerCase();
-        const t2 = String(d.title || "").toLowerCase();
-        return t1.startsWith(qLower) || t2.startsWith(qLower);
+        const t1 = normalize(String(d.englishTitle || ""));
+        const t2 = normalize(String(d.title || ""));
+        return t1.startsWith(nq) || t2.startsWith(nq);
       }) ?? false;
 
     const hasGood = (hits: any[]): boolean => hasExact(hits) || hasPrefix(hits);
@@ -313,13 +321,40 @@ export async function searchManga(
       .then((txt) => ({ txt, elapsed: Date.now() - fStart }))
       .catch(() => ({ txt: null as any, elapsed: Date.now() - fStart }));
 
-    const [{ txt: pText }, { txt: fText }] = await Promise.all([
+    const [{ txt: pText, elapsed: pElapsed }, { txt: fText, elapsed: fElapsed }] = await Promise.all([
       pPromise,
       fPromise,
     ]);
 
+
     const primary = parseSafe(pText);
     const fallback = parseSafe(fText);
+
+    // If either response contains an exact normalized title match, prefer and return only those exact hits.
+    const combinedHits = [
+      ...(primary?.hits ?? []),
+      ...(fallback?.hits ?? []),
+    ];
+    const combinedExactHits = combinedHits.filter((h: any) => {
+      const d = h?.document || {};
+      const t1 = normalize(String(d.englishTitle || ""));
+      const t2 = normalize(String(d.title || ""));
+      return t1 === nq || t2 === nq;
+    });
+
+    if (combinedExactHits.length > 0) {
+      // Return a minimal SearchResponse-shaped object containing only the exact matches.
+      return {
+        facet_counts: [],
+        found: combinedExactHits.length,
+        hits: combinedExactHits,
+        out_of: combinedExactHits.length,
+        page: 1,
+        request_params: { collection_name: "manga", first_q: q, per_page: pp, q },
+        search_cutoff: false,
+        search_time_ms: 0,
+      } as any;
+    }
 
     const pCount = primary?.hits?.length ?? 0;
     const fCount = fallback?.hits?.length ?? 0;

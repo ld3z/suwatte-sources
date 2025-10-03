@@ -1,7 +1,7 @@
 {
   "name": "suwatte-sources",
   "version": "1.0.0",
-  "description": "Custom Suwatte sources (including Cubari)",
+  "description": "suwatte-sources",
   "main": "dist/index.js",
   "scripts": {
     "build": "daisuke build",
@@ -29,7 +29,7 @@
     "nodemon": "^3.1.10",
     "rimraf": "^6.0.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "stt": {
     "listName": "ldez's Sources"

@@ -3,7 +3,7 @@ import { CatalogRating, RunnerInfo } from "@suwatte/daisuke";
 export const INFO: RunnerInfo = {
   id: "moe.atsu",
   name: "Atsumaru",
-  version: 0.1,
+  version: 0.2,
   website: "https://atsu.moe",
   supportedLanguages: ["en_US"],
   thumbnail: "atsu_logo.png",

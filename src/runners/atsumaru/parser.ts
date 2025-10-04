@@ -148,9 +148,7 @@ export async function getSeriesById(
         status: mangaData.status
           ? getPublicationStatus(mangaData.status)
           : undefined,
-        chapters: mangaData.chapters
-          ? convertApiChapters(mangaData.chapters, rawId)
-          : [],
+        chapters: await fetchAllChapters(rawId, client),
         properties: mangaData.tags
           ? ([
               {
@@ -199,9 +197,7 @@ export async function getSeriesById(
                   item.summary ||
                   `No description available for "${item.title}"`,
                 creators: undefined,
-                chapters: (item as any)?.chapters
-                  ? convertApiChapters((item as any).chapters, rawId)
-                  : [],
+                chapters: await fetchAllChapters(rawId, client),
                 properties: (item as any)?.tags
                   ? ([
                       {
@@ -404,114 +400,143 @@ export function mergeChapterLists(detailed?: any[], info?: any[]): any[] {
   return arr;
 }
 
-export function convertApiChapters(
-  apiChapters: any[],
-  contentId: string,
-): Chapter[] {
-  if (!apiChapters || apiChapters.length === 0) {
+
+export async function fetchAllChapters(
+  mangaId: string,
+  client?: SimpleNetworkClient,
+): Promise<Chapter[]> {
+  try {
+    const base = "https://atsu.moe/api/manga/chapters";
+    const firstUrl = `${base}?id=${encodeURIComponent(mangaId)}&filter=all&sort=desc&page=0`;
+    const firstTxt = await fetchText(firstUrl, client);
+    if (!firstTxt) return [];
+    let firstJson: any = null;
+    try {
+      firstJson = JSON.parse(firstTxt);
+    } catch {
+      // If parse fails, return empty
+      return [];
+    }
+
+    const totalPages = Number(firstJson?.pages ?? 0);
+    const collected: any[] = [];
+
+    // If the first response contains chapters, add them
+    if (Array.isArray(firstJson?.chapters)) {
+      collected.push(...firstJson.chapters);
+    }
+
+    // Pages indicated by `pages` are expected to be the count of pages.
+    // The API uses zero-based page indices (page=0 is the first page), so iterate from 1 to totalPages - 1.
+    for (let p = 1; p < totalPages; p++) {
+      try {
+        const url = `${base}?id=${encodeURIComponent(mangaId)}&filter=all&sort=desc&page=${p}`;
+        const txt = await fetchText(url, client);
+        if (!txt) continue;
+        const j = JSON.parse(txt);
+        if (Array.isArray(j?.chapters)) {
+          collected.push(...j.chapters);
+        }
+      } catch {
+        // Ignore individual page failures and continue
+      }
+    }
+
+    // Convert the aggregated raw chapters into the standardized Chapter[] type.
+    if (!collected || collected.length === 0) return [];
+
+    const hasIndex = collected.some(
+      (c: any) => c.index !== undefined && c.index !== null,
+    );
+    const hasNumber = collected.some(
+      (c: any) => c.number !== undefined && c.number !== null,
+    );
+
+    const copy = [...collected];
+
+    if (hasIndex) {
+      copy.sort((a: any, b: any) => Number(b.index ?? 0) - Number(a.index ?? 0));
+    } else if (hasNumber) {
+      copy.sort(
+        (a: any, b: any) => Number(b.number ?? 0) - Number(a.number ?? 0),
+      );
+    } else {
+      copy.reverse();
+    }
+
+    const result: Chapter[] = copy.map((chapter: any, idx: number) => {
+      const id =
+        chapter.id ??
+        chapter._id ??
+        String(chapter.slug ?? chapter.title ?? idx);
+      const chapterNumber =
+        chapter.number !== undefined && chapter.number !== null
+          ? Number(chapter.number)
+          : hasIndex && chapter.index !== undefined && chapter.index !== null
+            ? Number(chapter.index)
+            : idx + 1;
+
+      let dateObj: Date | undefined;
+
+      if (chapter.createdAt !== undefined && chapter.createdAt !== null) {
+        if (typeof chapter.createdAt === "number") {
+          dateObj = new Date(chapter.createdAt);
+        } else {
+          dateObj = parseDateLike(String(chapter.createdAt));
+          if (!dateObj) {
+            const n = Number(chapter.createdAt);
+            if (!Number.isNaN(n)) dateObj = new Date(n);
+          }
+        }
+      }
+
+      if (
+        !dateObj &&
+        chapter.publishedAt !== undefined &&
+        chapter.publishedAt !== null
+      ) {
+        if (typeof chapter.publishedAt === "number") {
+          dateObj = new Date(chapter.publishedAt);
+        } else {
+          dateObj = parseDateLike(String(chapter.publishedAt));
+          if (!dateObj) {
+            const n = Number(chapter.publishedAt);
+            if (!Number.isNaN(n)) dateObj = new Date(n);
+          }
+        }
+      }
+
+      if (
+        !dateObj &&
+        (chapter.timestamp !== undefined && chapter.timestamp !== null)
+      ) {
+        const n = Number(chapter.timestamp);
+        if (!Number.isNaN(n)) {
+          dateObj = n > 1e10 ? new Date(n) : new Date(n * 1000);
+        }
+      }
+
+      if (!dateObj) {
+        dateObj = new Date(1000 * idx);
+      }
+
+      return {
+        id,
+        chapterId: id,
+        number: chapterNumber,
+        title: chapter.title || `Chapter ${chapterNumber}`,
+        date: dateObj,
+        language: "en",
+        index: idx,
+        pageCount: chapter.pageCount ?? chapter.pages ?? 0,
+        progress: null,
+      } as Chapter;
+    });
+
+    return result;
+  } catch {
     return [];
   }
-
-  // Detect what fields are available on the chapters returned by different endpoints.
-  const hasIndex = apiChapters.some(
-    (c: any) => c.index !== undefined && c.index !== null,
-  );
-  const hasNumber = apiChapters.some(
-    (c: any) => c.number !== undefined && c.number !== null,
-  );
-
-  // Create a stable copy and sort newest-first.
-  const copy = [...apiChapters];
-
-  if (hasIndex) {
-    copy.sort((a: any, b: any) => Number(b.index ?? 0) - Number(a.index ?? 0));
-  } else if (hasNumber) {
-    copy.sort(
-      (a: any, b: any) => Number(b.number ?? 0) - Number(a.number ?? 0),
-    );
-  } else {
-    // If no numeric ordering is provided, assume the array is oldest->newest and reverse it.
-    copy.reverse();
-  }
-
-  const result = copy.map((chapter: any, idx: number) => {
-    // Prefer explicit id fields, fall back to generated values if missing.
-    const id =
-      chapter.id ??
-      chapter._id ??
-      String(chapter.slug ?? chapter.title ?? idx);
-    const chapterNumber =
-      chapter.number !== undefined && chapter.number !== null
-        ? Number(chapter.number)
-        : hasIndex && chapter.index !== undefined && chapter.index !== null
-          ? Number(chapter.index)
-          : idx + 1;
-
-    // Robust date parsing with fallbacks.
-    let dateObj: Date | undefined;
-
-    // Try common fields first
-    if (chapter.createdAt !== undefined && chapter.createdAt !== null) {
-      // Accept numbers or strings
-      if (typeof chapter.createdAt === "number") {
-        dateObj = new Date(chapter.createdAt);
-      } else {
-        dateObj = parseDateLike(String(chapter.createdAt));
-        if (!dateObj) {
-          const n = Number(chapter.createdAt);
-          if (!Number.isNaN(n)) dateObj = new Date(n);
-        }
-      }
-    }
-
-    if (
-      !dateObj &&
-      chapter.publishedAt !== undefined &&
-      chapter.publishedAt !== null
-    ) {
-      if (typeof chapter.publishedAt === "number") {
-        dateObj = new Date(chapter.publishedAt);
-      } else {
-        dateObj = parseDateLike(String(chapter.publishedAt));
-        if (!dateObj) {
-          const n = Number(chapter.publishedAt);
-          if (!Number.isNaN(n)) dateObj = new Date(n);
-        }
-      }
-    }
-
-    // Some endpoints may expose UNIX timestamps in seconds under different keys
-    if (
-      !dateObj &&
-      (chapter.timestamp !== undefined && chapter.timestamp !== null)
-    ) {
-      const n = Number(chapter.timestamp);
-      if (!Number.isNaN(n)) {
-        // Heuristic: if value looks like seconds (<= 1e10), convert to ms
-        dateObj = n > 1e10 ? new Date(n) : new Date(n * 1000);
-      }
-    }
-
-    // Final deterministic fallback: generate a stable date based on index so key exists
-    if (!dateObj) {
-      // Use epoch + index seconds so serialized dates are valid ISO strings and deterministic
-      dateObj = new Date(1000 * idx);
-    }
-
-    return {
-      id,
-      chapterId: id,
-      number: chapterNumber,
-      title: chapter.title || `Chapter ${chapterNumber}`,
-      date: dateObj,
-      language: "en",
-      index: idx,
-      pageCount: chapter.pageCount ?? chapter.pages ?? 0,
-      progress: null,
-    } as Chapter;
-  });
-
-  return result;
 }
 
 export async function getChapterData(

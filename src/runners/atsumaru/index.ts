@@ -23,6 +23,7 @@ import {
   extractHomeSectionsFromPrefetch,
   getSeriesById,
   getChapterData,
+  fetchAllChapters,
   searchManga,
 } from "./parser";
 import {
@@ -100,7 +101,13 @@ export class Target
   }
 
   async getChapters(contentId: string): Promise<Chapter[]> {
-    return [];
+    const { slug } = parseSeriesId(contentId);
+    try {
+      const chapters = await fetchAllChapters(slug, this.client);
+      return chapters;
+    } catch {
+      return [];
+    }
   }
 
   async getChapterData(

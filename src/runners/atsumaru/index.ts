@@ -51,17 +51,17 @@ export class Target
     throw new Error("Method not used.");
   }
 
-  private instructionsSection(): PageSection {
+  private topSearchedSection(): PageSection {
     return {
-      id: "atsu_instructions",
-      title: "Atsumaru",
+      id: "top_searched",
+      title: "Top searched",
       style: SectionStyle.PADDED_LIST,
       items: [
         {
-          id: "info",
-          title: "Browse atsu.moe",
-          subtitle: "Scroll for latest/popular from the homepage.",
-          cover: "/assets/cubari_logo.png",
+          id: "popular",
+          title: "Popular on Atsumaru",
+          subtitle: "Shows the popular/featured carousel from the homepage.",
+          cover: "/assets/atsu_logo.png",
         },
       ],
     };
@@ -75,7 +75,7 @@ export class Target
       const apiResponse = await this.fetcher(apiUrl);
       return extractHomeSectionsFromPrefetch(apiResponse, base);
     } catch {
-      return [this.instructionsSection()];
+      return [this.topSearchedSection()];
     }
   }
 
@@ -129,13 +129,54 @@ export class Target
   async getDirectory(query: DirectoryRequest): Promise<PagedResult> {
     const q = (query.query ?? "").trim();
     if (!q) {
+      // Try to fetch homepage sections and return the popular/featured carousel items
+      try {
+        const base = "https://atsu.moe/";
+        const apiUrl = "https://atsu.moe/api/home/page";
+        const apiResponse = await this.fetcher(apiUrl);
+        const sections = await extractHomeSectionsFromPrefetch(apiResponse, base);
+        if (sections && sections.length > 0) {
+          // Prefer sections that look like popular/featured carousels: gallery/slideshow or titles containing "popular"/"featured"
+          let chosen: PageSection | undefined = sections.find((s: PageSection) =>
+            (s.title && /popular|featured/i.test(s.title)) || s.style === SectionStyle.GALLERY,
+          );
+          // Fallback to the first section that has items
+          if (!chosen) {
+            chosen = sections.find((s: PageSection) => Array.isArray(s.items) && (s.items as any[]).length > 0);
+          }
+          if (chosen && Array.isArray(chosen.items) && (chosen.items as any).length > 0) {
+            // Normalize and ensure each item has an absolute/proxied cover URL so the UI can render thumbnails.
+            const rawItems = chosen.items as any[];
+            const normalized: Highlight[] = rawItems.map((it: any) => {
+              const coverSource = it.cover || it.image || it.banner || "";
+              let coverUrl = String(coverSource || "");
+              // If coverUrl is a relative path, make it absolute against base
+              if (coverUrl && !/^https?:\/\//i.test(coverUrl)) {
+                coverUrl = (base.replace(/\/$/, "") + "/" + coverUrl.replace(/^\//, ""));
+              }
+              const cover = coverUrl ? proxifyImage(coverUrl) : "/assets/atsu_logo.png";
+              const id = it.id || it.slug || (it as any)?.href || "";
+              return {
+                id,
+                title: it.title || it.name || "Series",
+                cover,
+                subtitle: it.subtitle || (it.chapter && it.chapter.title) || undefined,
+              } as Highlight;
+            });
+            return { results: normalized, isLastPage: true };
+          }
+        }
+      } catch {
+        // Ignore errors and fall back to a simple placeholder below
+      }
+      // Final fallback if homepage couldn't be fetched or no suitable section found
       return {
         results: [
           {
-            id: "atsu_instructions",
-            title: "Search Atsumaru manga",
-            cover: "/assets/cubari_logo.png",
-            subtitle: "Type a manga name to search",
+            id: "top_searched",
+            title: "Top searched",
+            cover: "/assets/atsu_logo.png",
+            subtitle: "Browse popular titles from the homepage",
           },
         ],
         isLastPage: true,

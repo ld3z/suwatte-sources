@@ -126,14 +126,18 @@ export async function getSeriesById(
 
     if (mangaData?.title) {
       const synopsis = mangaData.synopsis;
-
+ 
+      // Determine cover and log poster info for debugging
+      const _posterField = mangaData.poster;
+      const _cover = _posterField?.image
+        ? proxifyImage(`https://atsu.moe${_posterField.image}`)
+        : _posterField?.id
+          ? proxifyImage(`https://atsu.moe/static/${_posterField.id}`)
+          : "/assets/cubari_logo.png";
+ 
       const result = {
         title: mangaData.englishTitle || mangaData.title,
-        cover: mangaData.poster?.image
-          ? proxifyImage(`https://atsu.moe${mangaData.poster.image}`)
-          : mangaData.poster?.id
-            ? proxifyImage(`https://atsu.moe/static/${mangaData.poster.id}`)
-            : "/assets/cubari_logo.png",
+        cover: _cover,
         summary:
           synopsis ||
           `No description available for "${
@@ -186,11 +190,10 @@ export async function getSeriesById(
           for (const item of section.items) {
             if ((item.id || item.slug) === rawId && item.title) {
               const posterUrl = item.banner || item.image;
+              const _cover = posterUrl ? proxifyImage(posterUrl) : "/assets/cubari_logo.png";
               return {
                 title: item.title,
-                cover: posterUrl
-                  ? proxifyImage(posterUrl)
-                  : "/assets/cubari_logo.png",
+                cover: _cover,
                 summary:
                   item.synopsis ||
                   item.description ||
@@ -647,13 +650,57 @@ export async function extractHomeSectionsFromPrefetch(
         imgPath = imageMap.get(rawId) || it.banner;
       }
 
-      const cover = imgPath
-        ? proxifyImage(`https://atsu.moe${imgPath}`)
-        : "/assets/cubari_logo.png";
+      const _imgPath = imgPath;
+      // Resolve imgPath to an absolute URL and normalize poster locations to /static/posters:
+      let _resolvedImgUrl = "";
+      if (_imgPath) {
+        if (/^https?:\/\//i.test(_imgPath)) {
+          // Already absolute
+          _resolvedImgUrl = _imgPath;
+        } else if (_imgPath.startsWith("/static/posters/")) {
+          // Already correctly under /static/posters
+          _resolvedImgUrl = `https://atsu.moe${_imgPath}`;
+        } else if (_imgPath.startsWith("/posters/")) {
+          // Convert /posters/... -> /static/posters/...
+          _resolvedImgUrl = `https://atsu.moe/static${_imgPath}`;
+        } else if (_imgPath.startsWith("/")) {
+          // Other absolute path on the site
+          _resolvedImgUrl = `https://atsu.moe${_imgPath}`;
+        } else if (/^posters\//i.test(_imgPath)) {
+          // Relative poster path -> /static/posters/...
+          _resolvedImgUrl = `https://atsu.moe/static/${_imgPath}`;
+        } else {
+          // Fallback: treat as site-relative
+          _resolvedImgUrl = `https://atsu.moe/${_imgPath}`;
+        }
+      }
 
-      const h: Highlight = { id, title, cover } as Highlight;
+      // Normalize poster segments before proxifying to avoid inserting duplicate "/static" segments.
+      let normalizedImg = _resolvedImgUrl;
+      if (normalizedImg) {
+        const lower = normalizedImg.toLowerCase();
+
+        // If it contains '/posters/' but not '/static/posters/', convert safely.
+        if (lower.includes("/posters/") && !lower.includes("/static/posters/")) {
+          normalizedImg = normalizedImg.split("/posters/").join("/static/posters/");
+        }
+
+        // Collapse repeated '/static/posters/' occurrences into a single segment.
+        normalizedImg = normalizedImg.replace(/(\/static\/posters\/)+/gi, "/static/posters/");
+
+        // Ensure host is present for site-relative paths.
+        if (/^\/static\/posters\//i.test(normalizedImg)) {
+          normalizedImg = "https://atsu.moe" + normalizedImg;
+        }
+      }
+
+      // Use proxifyImage as the final safety net.
+      let _cover = normalizedImg ? proxifyImage(normalizedImg) : "/assets/cubari_logo.png";
+
+  
+      const h: Highlight = { id, title, cover: _cover } as Highlight;
       if (it.chapter?.title) h.subtitle = it.chapter.title;
-
+  
       items.push(h);
     }
 

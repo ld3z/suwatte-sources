@@ -157,9 +157,21 @@ export class Target
             const normalized: Highlight[] = rawItems.map((it: any) => {
               const coverSource = it.cover || it.image || it.banner || "";
               let coverUrl = String(coverSource || "");
-              // If coverUrl is a relative path, make it absolute against base
+              // If coverUrl is a relative path, make it absolute against base.
+              // Prefer canonical /static/posters for poster resources so URLs become
+              // https://atsu.moe/static/posters/...
               if (coverUrl && !/^https?:\/\//i.test(coverUrl)) {
-                coverUrl = (base.replace(/\/$/, "") + "/" + coverUrl.replace(/^\//, ""));
+                const cleaned = coverUrl.replace(/^\//, "");
+                if (/^posters\//i.test(cleaned)) {
+                  // Convert "posters/..." -> "/static/posters/..."
+                  coverUrl = `${base.replace(/\/$/, "")}/static/${cleaned}`;
+                } else if (/^static\/posters\//i.test(cleaned)) {
+                  // Already under static/posters
+                  coverUrl = `${base.replace(/\/$/, "")}/${cleaned}`;
+                } else {
+                  // Generic site-relative path
+                  coverUrl = `${base.replace(/\/$/, "")}/${cleaned}`;
+                }
               }
               const cover = coverUrl ? proxifyImage(coverUrl) : "/assets/atsu_logo.png";
               const id = it.id || it.slug || (it as any)?.href || "";

@@ -62,8 +62,41 @@ export function toAbsoluteUrl(base: string, href: string): string {
 }
 
 export function proxifyImage(absoluteUrl: string): string {
-  // Pass URLs directly to Suwatte without ANY modifications
-  return absoluteUrl || "";
+  if (!absoluteUrl) return "";
+  let url = String(absoluteUrl).trim();
+
+  // Fix malformed concatenations like "https://atsu.moeposters/..." or "https://atsu.moeposters..."
+  url = url.replace(/^https?:\/\/atsu\.moeposters\//i, "https://atsu.moe/static/posters/");
+  url = url.replace(/^https?:\/\/atsu\.moeposters/i, "https://atsu.moe/static/posters");
+
+  // Ensure host has trailing slash if concatenated without one
+  url = url.replace(/^https?:\/\/atsu\.moe(?!\/)/i, "https://atsu.moe/");
+
+  // Collapse duplicate /static/posters/ occurrences (e.g. /static/static/posters/)
+  url = url.replace(/\/static\/+posters\//gi, "/static/posters/");
+
+  // Convert host + /posters/ => host + /static/posters/
+  url = url.replace(/(https?:\/\/[^\/]*atsu\.moe)\/posters\//i, "$1/static/posters/");
+
+  // If the URL is a plain "posters/..." or "/posters/..." prefix, make it canonical.
+  if (/^\/?posters\//i.test(url)) {
+    url = url.replace(/^\/?posters\//i, "https://atsu.moe/static/posters/");
+  }
+
+  // If it contains '/posters/' but not '/static/posters/', convert the occurrences safely.
+  if (url.toLowerCase().includes("/posters/") && !url.toLowerCase().includes("/static/posters/")) {
+    url = url.split("/posters/").join("/static/posters/");
+  }
+
+  // If it's site-relative under /static/posters, ensure host is present.
+  if (/^\/static\/posters\//i.test(url)) {
+    url = "https://atsu.moe" + url;
+  }
+
+  // Final collapse: reduce repeated "/static" segments to a single "/static"
+  url = url.replace(/(\/static)+/gi, "/static");
+
+  return url;
 }
 
 export function fetchDoc(html: string): CheerioAPI {

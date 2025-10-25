@@ -90,14 +90,8 @@ export class Target
       return content;
     }
 
-    // Fallback
-    return {
-      title: "Atsumaru Series",
-      cover: "/assets/cubari_logo.png",
-      summary: undefined,
-      creators: undefined,
-      properties: [],
-    };
+    // If we couldn't fetch content (likely offline), signal the app to use cached metadata
+    throw new Error("Content unavailable (offline)");
   }
 
   async getChapters(contentId: string): Promise<Chapter[]> {
@@ -106,7 +100,8 @@ export class Target
       const chapters = await fetchAllChapters(slug, this.client);
       return chapters;
     } catch {
-      return [];
+      // Offline or failed fetch: surface error so the app can fall back to cached chapters
+      throw new Error("Chapters unavailable (offline)");
     }
   }
 
@@ -118,6 +113,7 @@ export class Target
     const chapterData = await getChapterData(slug, chapterId, this.client);
 
     if (!chapterData) {
+      // Signal failure so the app can use its cached chapter pages if available
       throw new Error(`Failed to fetch chapter data for ${chapterId}`);
     }
 

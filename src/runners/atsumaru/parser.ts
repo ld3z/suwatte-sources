@@ -152,7 +152,6 @@ export async function getSeriesById(
         status: mangaData.status
           ? getPublicationStatus(mangaData.status)
           : undefined,
-        chapters: await fetchAllChapters(rawId, client),
         properties: mangaData.tags
           ? ([
               {
@@ -200,7 +199,6 @@ export async function getSeriesById(
                   item.summary ||
                   `No description available for "${item.title}"`,
                 creators: undefined,
-                chapters: await fetchAllChapters(rawId, client),
                 properties: (item as any)?.tags
                   ? ([
                       {

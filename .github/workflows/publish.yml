@@ -43,6 +43,9 @@ jobs:
       - name: Replace Atsumaru Img
         run: sed -i 's|/assets/atsu_logo.png|https://ld3z.github.io/suwatte-sources/assets/atsu_logo.png|g' stt/index.html
 
+      - name: Replace WeebDex Img
+        run: sed -i 's|/assets/weebdex_logo.png|https://ld3z.github.io/suwatte-sources/assets/weebdex_logo.png|g' stt/index.html
+
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:

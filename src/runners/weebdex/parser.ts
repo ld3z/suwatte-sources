@@ -15,6 +15,7 @@ import {
   formatChapterNumber,
   formatDemographic,
   formatStatus,
+  generateSlug,
   getAltTitles,
   getCoverUrl,
   getPageUrl,
@@ -246,14 +247,6 @@ export function mangaToContent(manga: Manga): Content {
   // Create tags for metadata display
   const metadataTags: any[] = [];
   
-  // Add status
-  if (manga.status) {
-    metadataTags.push({
-      id: "status",
-      title: formatStatus(manga.status),
-    });
-  }
-
   // Add demographic
   const demographic = formatDemographic(manga.demographic);
   if (demographic) {
@@ -317,6 +310,9 @@ export function mangaToContent(manga: Manga): Content {
     additionalTitles.push(altTitles);
   }
 
+  // Generate slug from title for proper URL
+  const titleSlug = generateSlug(primaryTitle);
+
   return {
     title: primaryTitle,
     cover,
@@ -324,7 +320,7 @@ export function mangaToContent(manga: Manga): Content {
     status: publicationStatus,
     properties,
     additionalTitles,
-    webUrl: `https://weebdex.org/manga/${manga.id}`,
+    webUrl: `https://weebdex.org/title/${manga.id}/${titleSlug}`,
     creators: manga.relationships?.authors?.map((a) => a.name) || [],
   };
 }

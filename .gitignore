@@ -6,3 +6,6 @@ stt/
 
 # Build output
 /dist/
+
+# Docs
+docs/

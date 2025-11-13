@@ -162,7 +162,11 @@ export class Target
           }
         }
 
-        // Build title
+        // Get group names
+        const groups = chapter.relationships?.groups?.map((g) => g.name) || [];
+        const groupText = groups.length > 0 ? ` [${groups.join(", ")}]` : "";
+
+        // Build title with group names
         let title = chapter.title || "";
         if (!title) {
           const parts: string[] = [];
@@ -170,6 +174,7 @@ export class Target
           if (chapter.chapter) parts.push(`Ch. ${chapter.chapter}`);
           title = parts.length > 0 ? parts.join(" ") : "Chapter";
         }
+        title += groupText;
 
         suwatteChapters.push({
           chapterId,
@@ -182,7 +187,30 @@ export class Target
         });
       }
 
-      console.log(`Converted to ${suwatteChapters.length} Suwatte chapters`);
+      // Sort chapters: chapters without volumes first (descending by chapter number),
+      // then chapters with volumes (descending by volume, then chapter)
+      suwatteChapters.sort((a, b) => {
+        // If one has volume and other doesn't, prioritize the one without volume
+        if (a.volume === undefined && b.volume !== undefined) return -1;
+        if (a.volume !== undefined && b.volume === undefined) return 1;
+        
+        // Both have no volume - sort by chapter number descending
+        if (a.volume === undefined && b.volume === undefined) {
+          return b.number - a.number;
+        }
+        
+        // Both have volumes - sort by volume descending, then chapter descending
+        if (a.volume !== b.volume) {
+          return b.volume! - a.volume!;
+        }
+        return b.number - a.number;
+      });
+
+      // Update indices after sorting
+      suwatteChapters.forEach((chapter, index) => {
+        chapter.index = index;
+      });
+
       return suwatteChapters;
     } catch (error) {
       console.error(`Failed to get chapters for ${contentId}:`, error);

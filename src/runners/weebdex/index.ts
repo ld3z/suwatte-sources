@@ -162,9 +162,13 @@ export class Target
           }
         }
 
-        // Get group names
-        const groups = chapter.relationships?.groups?.map((g) => g.name) || [];
-        const groupText = groups.length > 0 ? ` [${groups.join(", ")}]` : "";
+        // Get group names and convert to providers
+        const groups = chapter.relationships?.groups || [];
+        const providers = groups.map((g) => ({
+          id: g.id,
+          name: g.name,
+        }));
+        const groupText = groups.length > 0 ? ` [${groups.map(g => g.name).join(", ")}]` : "";
 
         // Build title with group names
         let title = chapter.title || "";
@@ -174,7 +178,6 @@ export class Target
           if (chapter.chapter) parts.push(`Ch. ${chapter.chapter}`);
           title = parts.length > 0 ? parts.join(" ") : "Chapter";
         }
-        title += groupText;
 
         suwatteChapters.push({
           chapterId,
@@ -184,6 +187,7 @@ export class Target
           language: chapter.language,
           date: new Date(chapter.published_at),
           index: i,
+          providers: providers.length > 0 ? providers : undefined,
         });
       }
 

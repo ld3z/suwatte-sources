@@ -37,14 +37,12 @@ jobs:
       - name: Build Sources List
         run: pnpm run build
 
-      - name: Replace Cubari Img
-        run: sed -i 's|/assets/cubari_logo.png|https://ld3z.github.io/suwatte-sources/assets/cubari_logo.png|g' stt/index.html
-
-      - name: Replace Atsumaru Img
-        run: sed -i 's|/assets/atsu_logo.png|https://ld3z.github.io/suwatte-sources/assets/atsu_logo.png|g' stt/index.html
-
-      - name: Replace WeebDex Img
-        run: sed -i 's|/assets/weebdex_logo.png|https://ld3z.github.io/suwatte-sources/assets/weebdex_logo.png|g' stt/index.html
+      - name: Replace All Images
+        run: |
+          sed -i 's|/assets/cubari_logo.png|https://ld3z.github.io/suwatte-sources/assets/cubari_logo.png|g' stt/index.html
+          sed -i 's|/assets/atsu_logo.png|https://ld3z.github.io/suwatte-sources/assets/atsu_logo.png|g' stt/index.html
+          sed -i 's|/assets/weebdex_logo.png|https://ld3z.github.io/suwatte-sources/assets/weebdex_logo.png|g' stt/index.html
+          sed -i 's|/assets/comix_logo.png|https://ld3z.github.io/suwatte-sources/assets/comix_logo.png|g' stt/index.html
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3

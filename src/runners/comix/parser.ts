@@ -304,43 +304,16 @@ export async function getAllChapters(
     page++;
   }
 
-  // Deduplicate chapters (prefer official, then highest votes, then most recent)
-  const chapterMap = new Map<number, ComixChapter>();
-
-  for (const chapter of chapters) {
-    const key = chapter.number;
-    const existing = chapterMap.get(key);
-
-    if (!existing) {
-      chapterMap.set(key, chapter);
-      continue;
+  // Sort chapters by number desc, then by updated_at desc (to show newer versions first for same chapter)
+  chapters.sort((a, b) => {
+    if (a.number !== b.number) {
+      return b.number - a.number;
     }
-
-    // Determine if current chapter is better than existing
-    const officialNew = chapter.scanlation_group_id === OFFICIAL_GROUP_ID;
-    const officialExisting = existing.scanlation_group_id === OFFICIAL_GROUP_ID;
-
-    let isBetter = false;
-    if (officialNew && !officialExisting) {
-      isBetter = true;
-    } else if (!officialNew && officialExisting) {
-      isBetter = false;
-    } else {
-      // Both official or both not official, compare votes then updatedAt
-      if (chapter.votes > existing.votes) {
-        isBetter = true;
-      } else if (chapter.votes === existing.votes) {
-        isBetter = chapter.updated_at > existing.updated_at;
-      }
-    }
-
-    if (isBetter) {
-      chapterMap.set(key, chapter);
-    }
-  }
+    return b.updated_at - a.updated_at;
+  });
 
   // Convert to Suwatte chapters
-  const dedupedChapters = Array.from(chapterMap.values());
+  const dedupedChapters = chapters;
   
   return dedupedChapters.map((chapter, index) => {
     let title = "Chapter " + formatChapterNumber(chapter.number);

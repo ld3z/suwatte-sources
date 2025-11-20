@@ -332,7 +332,7 @@ export async function getAllChapters(
         id: chapter.scanlation_group_id.toString(),
         name: chapter.scanlation_group.name,
       }] : [{
-        id: "unknown",
+        id: `unknown_${hashId}`,
         name: "Unknown",
       }],
       webUrl: `${BASE_URL}/title/${hashId}/${chapter.chapter_id}`,

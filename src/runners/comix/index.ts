@@ -15,6 +15,8 @@ import {
   PageSection,
   ResolvedPageSection,
   SectionStyle,
+  RunnerPreferenceProvider,
+  UIToggle,
 } from "@suwatte/daisuke";
 import { BASE_URL, INFO } from "./constants";
 import { NetworkClient, parseMangaId, SimpleNetworkClient } from "./helpers";
@@ -29,10 +31,11 @@ import {
 } from "./parser";
 
 export class Target
-  implements ContentSource, ImageRequestHandler, PageLinkResolver
+  implements ContentSource, ImageRequestHandler, PageLinkResolver, RunnerPreferenceProvider
 {
   info = INFO;
   private client: SimpleNetworkClient = new NetworkClient();
+  private hideNSFW: boolean = false;
 
   // --- PageLinkResolver ---
   async resolvePageSection(
@@ -48,7 +51,13 @@ export class Target
       const popularResponse = await getPopularManga(this.client, 1);
 
       if (popularResponse?.result?.items && popularResponse.result.items.length > 0) {
-        const highlights = mangaListToHighlights(popularResponse.result.items);
+        // Filter out NSFW content if hide_nsfw is enabled
+        let filteredItems = popularResponse.result.items;
+        if (this.hideNSFW) {
+          filteredItems = popularResponse.result.items.filter(manga => !manga.is_nsfw);
+        }
+
+        const highlights = mangaListToHighlights(filteredItems);
 
         return [
           {
@@ -191,7 +200,13 @@ export class Target
         }
 
         if (response?.result?.items && response.result.items.length > 0) {
-          const highlights = mangaListToHighlights(response.result.items);
+          // Filter out NSFW content if hide_nsfw is enabled
+          let filteredItems = response.result.items;
+          if (this.hideNSFW) {
+            filteredItems = response.result.items.filter(manga => !manga.is_nsfw);
+          }
+
+          const highlights = mangaListToHighlights(filteredItems);
           const isLastPage =
             response.result.pagination.current_page >= response.result.pagination.last_page;
 
@@ -245,8 +260,14 @@ export class Target
         };
       }
 
-      const highlights = mangaListToHighlights(response.result.items);
-      const isLastPage = 
+      // Filter out NSFW content if hide_nsfw is enabled
+      let filteredItems = response.result.items;
+      if (this.hideNSFW) {
+        filteredItems = response.result.items.filter(manga => !manga.is_nsfw);
+      }
+
+      const highlights = mangaListToHighlights(filteredItems);
+      const isLastPage =
         response.result.pagination.current_page >= response.result.pagination.last_page;
 
       return {
@@ -425,6 +446,26 @@ export class Target
       headers: {
         Referer: `${BASE_URL}/`,
       },
+    };
+  }
+
+  // --- RunnerPreferenceProvider ---
+  async getPreferenceMenu(): Promise<{ sections: any[] }> {
+    return {
+      sections: [
+        {
+          children: [
+            UIToggle({
+              id: "hide_nsfw",
+              title: "Hide NSFW Content",
+              value: this.hideNSFW,
+              didChange: async (value: boolean) => {
+                this.hideNSFW = value;
+              },
+            }),
+          ],
+        },
+      ],
     };
   }
 }

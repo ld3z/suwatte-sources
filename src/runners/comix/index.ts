@@ -47,28 +47,58 @@ export class Target
 
   async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
     try {
-      // Get popular manga for the homepage
-      const popularResponse = await getPopularManga(this.client, 1);
+      // Fetch popular and latest updates in parallel for the homepage
+      const [popularSettled, latestSettled] = await Promise.allSettled([
+        getPopularManga(this.client, 1),
+        getLatestManga(this.client, 1),
+      ]);
 
-      if (popularResponse?.result?.items && popularResponse.result.items.length > 0) {
-        // Filter out NSFW content if hide_nsfw is enabled
-        let filteredItems = popularResponse.result.items;
+      const sections: PageSection[] = [];
+
+      // Popular section (30 days)
+      if (
+        popularSettled.status === "fulfilled" &&
+        popularSettled.value?.result?.items &&
+        popularSettled.value.result.items.length > 0
+      ) {
+        let popularItems = popularSettled.value.result.items;
         if (this.hideNSFW) {
-          filteredItems = popularResponse.result.items.filter(manga => !manga.is_nsfw);
+          popularItems = popularItems.filter((manga) => !manga.is_nsfw);
         }
-
-        const highlights = mangaListToHighlights(filteredItems);
-
-        return [
-          {
-            id: "popular",
-            title: "Popular (30 Days)",
-            style: SectionStyle.STANDARD_GRID,
-            items: highlights.slice(0, 20),
-          },
-        ];
+        const popularHighlights = mangaListToHighlights(popularItems);
+        sections.push({
+          id: "popular",
+          title: "Popular (30 Days)",
+          style: SectionStyle.GALLERY,
+          items: popularHighlights.slice(0, 20),
+        });
       }
-      // Fallback if popular fails
+
+      // Latest updates section
+      if (
+        latestSettled.status === "fulfilled" &&
+        latestSettled.value?.result?.items &&
+        latestSettled.value.result.items.length > 0
+      ) {
+        let latestItems = latestSettled.value.result.items;
+        if (this.hideNSFW) {
+          latestItems = latestItems.filter((manga) => !manga.is_nsfw);
+        }
+        const latestHighlights = mangaListToHighlights(latestItems);
+        sections.push({
+          id: "latest",
+          title: "Latest Updates",
+          style: SectionStyle.STANDARD_GRID,
+          items: latestHighlights.slice(0, 20),
+        });
+      }
+
+      // If we were able to build at least one section, return them
+      if (sections.length > 0) {
+        return sections;
+      }
+
+      // Fallback if no sections could be built
       return [
         {
           id: "info",

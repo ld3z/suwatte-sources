@@ -356,7 +356,8 @@ export async function getChapterData(
   }
 
   return {
-    pages: data.result.images.map((imageUrl, index) => {
+    pages: data.result.images.map((image, index) => {
+      const imageUrl = image.url;
       try {
         // Try to decode as base64 in case API returns encoded URLs
         const decodedUrl = typeof atob !== "undefined" ? atob(imageUrl) : imageUrl;

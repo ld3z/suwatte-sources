@@ -71,7 +71,7 @@ export interface ChapterListResponse {
 export interface ChapterDataResponse {
   result?: {
     chapter_id: number;
-    images: string[];
+    images: { url: string }[];
   };
 }
 

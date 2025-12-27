@@ -7,7 +7,7 @@ export interface SimpleNetworkClient {
 
 export async function fetchText(
   url: string,
-  client?: SimpleNetworkClient,
+  client?: SimpleNetworkClient
 ): Promise<string> {
   if (client) {
     const res = await client.get(url, {
@@ -62,39 +62,38 @@ export function toAbsoluteUrl(base: string, href: string): string {
 }
 
 export function proxifyImage(absoluteUrl: string): string {
-  if (!absoluteUrl) return "";
-  let url = String(absoluteUrl).trim();
+  if (!absoluteUrl?.trim()) return "";
 
-  // Fix malformed concatenations like "https://atsu.moeposters/..." or "https://atsu.moeposters..."
-  url = url.replace(/^https?:\/\/atsu\.moeposters\//i, "https://atsu.moe/static/posters/");
-  url = url.replace(/^https?:\/\/atsu\.moeposters/i, "https://atsu.moe/static/posters");
+  let url = absoluteUrl.trim();
+  const lowerUrl = url.toLowerCase();
 
-  // Ensure host has trailing slash if concatenated without one
-  url = url.replace(/^https?:\/\/atsu\.moe(?!\/)/i, "https://atsu.moe/");
+  // Fix malformed concatenations: atsu.moeposters → atsu.moe/static/posters
+  url = url.replace(/^(https?:\/\/atsu\.moe)posters\//i, "$1/static/posters/");
+  url = url.replace(
+    /^(https?:\/\/atsu\.moe)posters(?!\/)/i,
+    "$1/static/posters"
+  );
 
-  // Collapse duplicate /static/posters/ occurrences (e.g. /static/static/posters/)
-  url = url.replace(/\/static\/+posters\//gi, "/static/posters/");
+  // Ensure host has trailing slash
+  url = url.replace(/^(https?:\/\/atsu\.moe)(?!\/)/i, "$1/");
 
-  // Convert host + /posters/ => host + /static/posters/
-  url = url.replace(/(https?:\/\/[^\/]*atsu\.moe)\/posters\//i, "$1/static/posters/");
+  // Convert /posters/ → /static/posters/ (single regex)
+  url = url.replace(
+    /(https?:\/\/[^\/]*atsu\.moe)\/posters\//i,
+    "$1/static/posters/"
+  );
 
-  // If the URL is a plain "posters/..." or "/posters/..." prefix, make it canonical.
+  // Handle site-relative paths
   if (/^\/?posters\//i.test(url)) {
-    url = url.replace(/^\/?posters\//i, "https://atsu.moe/static/posters/");
-  }
-
-  // If it contains '/posters/' but not '/static/posters/', convert the occurrences safely.
-  if (url.toLowerCase().includes("/posters/") && !url.toLowerCase().includes("/static/posters/")) {
-    url = url.split("/posters/").join("/static/posters/");
-  }
-
-  // If it's site-relative under /static/posters, ensure host is present.
-  if (/^\/static\/posters\//i.test(url)) {
+    url =
+      "https://atsu.moe/static/posters/" + url.replace(/^\/?posters\//i, "");
+  } else if (/^\/static\/posters\//i.test(url)) {
     url = "https://atsu.moe" + url;
   }
 
-  // Final collapse: reduce repeated "/static" segments to a single "/static"
-  url = url.replace(/(\/static)+/gi, "/static");
+  // Collapse all repeated /static and /posters segments in one pass
+  url = url.replace(/\/(static|posters)\/+/gi, "/$1/");
+  url = url.replace(/(\/static)+(\/posters)?/gi, "/static/posters");
 
   return url;
 }

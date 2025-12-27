@@ -46,22 +46,22 @@ export function mangaToContent(
   scorePosition: string = "top"
 ): Content {
   const rating = generateStarRating(manga.rated_avg || 0);
-  
+
   // Build description
   let description = "";
-  
+
   if (scorePosition === "top" && rating) {
     description += rating + "\n\n";
   }
-  
+
   if (manga.synopsis) {
     description += manga.synopsis;
   }
-  
+
   if (showAltTitles && manga.alt_titles && manga.alt_titles.length > 0) {
     description += "\n\nAlternative Names:\n" + manga.alt_titles.join("\n");
   }
-  
+
   if (scorePosition === "bottom" && rating) {
     if (description) description += "\n\n";
     description += rating;
@@ -91,7 +91,10 @@ export function mangaToContent(
     properties.push({
       id: "author",
       title: "Author",
-      tags: manga.author.map((a) => ({ id: a.term_id.toString(), title: a.title })),
+      tags: manga.author.map((a) => ({
+        id: a.term_id.toString(),
+        title: a.title,
+      })),
     });
   }
 
@@ -99,13 +102,16 @@ export function mangaToContent(
     properties.push({
       id: "artist",
       title: "Artist",
-      tags: manga.artist.map((a) => ({ id: a.term_id.toString(), title: a.title })),
+      tags: manga.artist.map((a) => ({
+        id: a.term_id.toString(),
+        title: a.title,
+      })),
     });
   }
 
   // Build genre tags
   const genreTags: string[] = [];
-  
+
   // Add type
   if (manga.type) {
     const typeMap: { [key: string]: string } = {
@@ -142,7 +148,10 @@ export function mangaToContent(
     properties.push({
       id: "genres",
       title: "Genres",
-      tags: genreTags.map((tag, index) => ({ id: `genre_${index}`, title: tag })),
+      tags: genreTags.map((tag, index) => ({
+        id: `genre_${index}`,
+        title: tag,
+      })),
     });
   }
 
@@ -180,9 +189,8 @@ export async function getMangaById(
   const url = `${API_URL}/manga/${hashId}?includes[]=demographic&includes[]=genre&includes[]=theme&includes[]=author&includes[]=artist&includes[]=publisher`;
 
   const response = await client.get(url);
-  const data: SingleMangaResponse = typeof response === "string"
-    ? JSON.parse(response)
-    : response;
+  const data: SingleMangaResponse =
+    typeof response === "string" ? JSON.parse(response) : response;
 
   return mangaToContent(data.result);
 }
@@ -276,34 +284,62 @@ export async function searchManga(
 
   const url = `${API_URL}/manga?${params.toString()}`;
   const response = await client.get(url);
-  const data: SearchResponse = typeof response === "string"
-    ? JSON.parse(response)
-    : response;
+  const data: SearchResponse =
+    typeof response === "string" ? JSON.parse(response) : response;
   return data;
 }
 
-// Get all chapters for a manga
+// Get all chapters for a manga (parallel pagination for speed)
 export async function getAllChapters(
   hashId: string,
   client: SimpleNetworkClient
 ): Promise<Chapter[]> {
-  const chapters: ComixChapter[] = [];
-  let page = 1;
-  let hasMore = true;
+  // Fetch first page to get total count
+  const firstUrl = `${API_URL}/manga/${hashId}/chapters?order[number]=desc&limit=100&page=1`;
+  const firstResponse = await client.get(firstUrl);
+  const firstData: ChapterListResponse =
+    typeof firstResponse === "string"
+      ? JSON.parse(firstResponse)
+      : firstResponse;
 
-  while (hasMore) {
-    const url = `${API_URL}/manga/${hashId}/chapters?order[number]=desc&limit=100&page=${page}`;
-    const response = await client.get(url);
-    const data: ChapterListResponse = typeof response === "string"
-      ? JSON.parse(response)
-      : response;
+  const chapters: ComixChapter[] = [...firstData.result.items];
+  const totalPages = firstData.result.pagination.last_page;
 
-    chapters.push(...data.result.items);
-
-    hasMore = data.result.pagination.current_page < data.result.pagination.last_page;
-    page++;
+  // If there's only one page, format and return immediately
+  if (totalPages <= 1) {
+    return formatChaptersForComix(chapters, hashId);
   }
 
+  // Fetch remaining pages in parallel (max 5 concurrent to respect rate limits)
+  const remainingPages = Array.from(
+    { length: totalPages - 1 },
+    (_, i) => i + 2
+  );
+  const chunkSize = 5;
+
+  for (let i = 0; i < remainingPages.length; i += chunkSize) {
+    const chunk = remainingPages.slice(i, i + chunkSize);
+    const promises = chunk.map((pageNum) => {
+      const url = `${API_URL}/manga/${hashId}/chapters?order[number]=desc&limit=100&page=${pageNum}`;
+      return client.get(url).then((response) => {
+        const data: ChapterListResponse =
+          typeof response === "string" ? JSON.parse(response) : response;
+        return data.result.items;
+      });
+    });
+
+    const results = await Promise.all(promises);
+    results.forEach((items) => chapters.push(...items));
+  }
+
+  return formatChaptersForComix(chapters, hashId);
+}
+
+// Format raw chapters into Suwatte chapters
+function formatChaptersForComix(
+  chapters: ComixChapter[],
+  hashId: string
+): Chapter[] {
   // Sort chapters by number desc, then by updated_at desc (to show newer versions first for same chapter)
   chapters.sort((a, b) => {
     if (a.number !== b.number) {
@@ -313,9 +349,7 @@ export async function getAllChapters(
   });
 
   // Convert to Suwatte chapters
-  const dedupedChapters = chapters;
-  
-  return dedupedChapters.map((chapter, index) => {
+  return chapters.map((chapter, index) => {
     let title = "Chapter " + formatChapterNumber(chapter.number);
     if (chapter.name) {
       title += ": " + chapter.name;
@@ -328,13 +362,19 @@ export async function getAllChapters(
       language: "en",
       date: new Date(chapter.updated_at * 1000),
       index,
-      providers: chapter.scanlation_group ? [{
-        id: chapter.scanlation_group_id.toString(),
-        name: chapter.scanlation_group.name,
-      }] : [{
-        id: `unknown_${hashId}`,
-        name: "Unknown",
-      }],
+      providers: chapter.scanlation_group
+        ? [
+            {
+              id: chapter.scanlation_group_id.toString(),
+              name: chapter.scanlation_group.name,
+            },
+          ]
+        : [
+            {
+              id: `unknown_${hashId}`,
+              name: "Unknown",
+            },
+          ],
       webUrl: `${BASE_URL}/title/${hashId}/${chapter.chapter_id}`,
     };
   });
@@ -347,9 +387,8 @@ export async function getChapterData(
 ): Promise<ChapterData> {
   const url = `${API_URL}/chapters/${chapterId}`;
   const response = await client.get(url);
-  const data: ChapterDataResponse = typeof response === "string"
-    ? JSON.parse(response)
-    : response;
+  const data: ChapterDataResponse =
+    typeof response === "string" ? JSON.parse(response) : response;
 
   if (!data.result || !data.result.images || data.result.images.length === 0) {
     throw new Error(`No images found for chapter ${chapterId}`);
@@ -360,7 +399,8 @@ export async function getChapterData(
       const imageUrl = image.url;
       try {
         // Try to decode as base64 in case API returns encoded URLs
-        const decodedUrl = typeof atob !== "undefined" ? atob(imageUrl) : imageUrl;
+        const decodedUrl =
+          typeof atob !== "undefined" ? atob(imageUrl) : imageUrl;
         return { url: decodedUrl };
       } catch {
         // If not base64, use as is
@@ -382,9 +422,8 @@ export async function getPopularManga(
 
   const url = `${API_URL}/manga?${params.toString()}`;
   const response = await client.get(url);
-  const data: SearchResponse = typeof response === "string"
-    ? JSON.parse(response)
-    : response;
+  const data: SearchResponse =
+    typeof response === "string" ? JSON.parse(response) : response;
   return data;
 }
 
@@ -400,8 +439,7 @@ export async function getLatestManga(
 
   const url = `${API_URL}/manga?${params.toString()}`;
   const response = await client.get(url);
-  const data: SearchResponse = typeof response === "string"
-    ? JSON.parse(response)
-    : response;
+  const data: SearchResponse =
+    typeof response === "string" ? JSON.parse(response) : response;
   return data;
 }

@@ -85,29 +85,28 @@ export async function getChaptersForManga(
       params.tlang = translatedLanguage;
     }
 
-    console.log(`getChaptersForManga: Requesting /manga/${mangaId}/chapters with params:`, JSON.stringify(params));
     const response = await fetchJSON<ChapterListResponse>(
       `/manga/${mangaId}/chapters`,
       client,
       params
     );
-    console.log(`getChaptersForManga: Success, got ${response.data?.length || 0} chapters`);
     return response;
   } catch (error) {
-    console.error(`getChaptersForManga: Failed for manga ${mangaId}:`, error);
-    
     // Try with minimal parameters as fallback
-    console.log(`getChaptersForManga: Trying fallback with minimal params...`);
     try {
       const minimalResponse = await fetchJSON<ChapterListResponse>(
         `/manga/${mangaId}/chapters`,
         client,
         { limit, page }
       );
-      console.log(`getChaptersForManga: Fallback success, got ${minimalResponse.data?.length || 0} chapters`);
       return minimalResponse;
     } catch (fallbackError) {
-      console.error(`getChaptersForManga: Fallback also failed:`, fallbackError);
+      console.error(
+        `getChaptersForManga error for ${mangaId}:`,
+        fallbackError instanceof Error
+          ? fallbackError.message
+          : String(fallbackError)
+      );
       throw fallbackError;
     }
   }
@@ -122,36 +121,47 @@ export async function getAllChapters(
   translatedLanguage?: string[]
 ): Promise<WeebDexChapter[]> {
   try {
-    console.log(`getAllChapters: Fetching chapters for manga ${mangaId}`);
-    const allChapters: WeebDexChapter[] = [];
-    let page = 1;
-    const limit = 100;
+    // Fetch up to 500 chapters in single request to reduce API calls
+    const response = await getChaptersForManga(
+      mangaId,
+      client,
+      1,
+      500,
+      translatedLanguage
+    );
 
-    while (true) {
-      console.log(`getAllChapters: Fetching page ${page}`);
-      const response = await getChaptersForManga(
-        mangaId,
-        client,
-        page,
-        limit,
-        translatedLanguage
-      );
+    const allChapters: WeebDexChapter[] = [...response.data];
 
-      console.log(`getAllChapters: Page ${page} returned ${response.data.length} chapters, total: ${response.total}`);
-      allChapters.push(...response.data);
+    // Only paginate if more chapters exist
+    if (response.data.length >= 500 && allChapters.length < response.total) {
+      let page = 2;
+      const limit = 500;
 
-      // Check if we've received all chapters
-      if (response.data.length < limit || page * limit >= response.total) {
-        break;
+      while (allChapters.length < response.total) {
+        const pageResponse = await getChaptersForManga(
+          mangaId,
+          client,
+          page,
+          limit,
+          translatedLanguage
+        );
+
+        allChapters.push(...pageResponse.data);
+
+        if (pageResponse.data.length < limit) {
+          break;
+        }
+
+        page++;
       }
-
-      page++;
     }
 
-    console.log(`getAllChapters: Total chapters collected: ${allChapters.length}`);
     return allChapters;
   } catch (error) {
-    console.error(`getAllChapters: Error fetching chapters for ${mangaId}:`, error);
+    console.error(
+      `getAllChapters error for ${mangaId}:`,
+      error instanceof Error ? error.message : String(error)
+    );
     throw error;
   }
 }
@@ -246,7 +256,7 @@ export function mangaToContent(manga: Manga): Content {
 
   // Create tags for metadata display
   const metadataTags: any[] = [];
-  
+
   // Add demographic
   const demographic = formatDemographic(manga.demographic);
   if (demographic) {
@@ -268,7 +278,9 @@ export function mangaToContent(manga: Manga): Content {
   if (manga.content_rating) {
     metadataTags.push({
       id: "content_rating",
-      title: manga.content_rating.charAt(0).toUpperCase() + manga.content_rating.slice(1),
+      title:
+        manga.content_rating.charAt(0).toUpperCase() +
+        manga.content_rating.slice(1),
     });
   }
 
@@ -333,7 +345,7 @@ export function chapterToSuwatteChapter(
   mangaId: string
 ): Chapter {
   const chapterId = buildChapterId(mangaId, chapter.id, chapter.language);
-  
+
   // Build chapter title
   let title = chapter.title || "";
   if (!title) {
@@ -383,9 +395,10 @@ export async function getChapterData(
   const chapter = await getChapterById(chapterId, client);
 
   // Select data source
-  const pages = useOptimized && chapter.data_optimized.length > 0
-    ? chapter.data_optimized
-    : chapter.data;
+  const pages =
+    useOptimized && chapter.data_optimized.length > 0
+      ? chapter.data_optimized
+      : chapter.data;
 
   if (!pages || pages.length === 0) {
     throw new Error(`No pages found for chapter ${chapterId}`);
@@ -446,10 +459,12 @@ export function mangaListToHighlights(mangaList: Manga[]): Highlight[] {
 /**
  * Convert chapter list to highlights
  */
-export function chapterListToHighlights(chapters: WeebDexChapter[]): Highlight[] {
+export function chapterListToHighlights(
+  chapters: WeebDexChapter[]
+): Highlight[] {
   return chapters.map((chapter) => {
     const manga = chapter.relationships?.manga;
-    
+
     // Fallback if manga data is missing
     if (!manga || !manga.id) {
       const chapterTitle = formatChapterNumber(chapter.chapter, chapter.volume);
@@ -471,7 +486,9 @@ export function chapterListToHighlights(chapters: WeebDexChapter[]): Highlight[]
     // Get manga title safely
     const title = manga.title || "Unknown Manga";
     const chapterTitle = formatChapterNumber(chapter.chapter, chapter.volume);
-    const subtitle = chapter.title ? `${chapterTitle} - ${chapter.title}` : chapterTitle;
+    const subtitle = chapter.title
+      ? `${chapterTitle} - ${chapter.title}`
+      : chapterTitle;
 
     return {
       id: buildMangaId(manga.id),

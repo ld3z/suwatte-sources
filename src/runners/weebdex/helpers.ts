@@ -27,11 +27,7 @@ export async function fetchJSON<T = any>(
 ): Promise<T> {
   try {
     const fullUrl = url.startsWith("http") ? url : `${BASE_URL}${url}`;
-    console.log(`fetchJSON: Requesting ${fullUrl}`);
-    if (params) {
-      console.log(`fetchJSON: With params:`, JSON.stringify(params));
-    }
-    
+
     // Build query string manually without using URL API
     let finalUrl = fullUrl;
     if (params && Object.keys(params).length > 0) {
@@ -40,21 +36,23 @@ export async function fetchJSON<T = any>(
         if (Array.isArray(value)) {
           value.forEach((v) => {
             if (v !== undefined && v !== null) {
-              queryParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`);
+              queryParts.push(
+                `${encodeURIComponent(key)}=${encodeURIComponent(String(v))}`
+              );
             }
           });
         } else if (value !== undefined && value !== null) {
-          queryParts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+          queryParts.push(
+            `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
+          );
         }
       });
-      
+
       if (queryParts.length > 0) {
-        finalUrl = `${fullUrl}?${queryParts.join('&')}`;
+        finalUrl = `${fullUrl}?${queryParts.join("&")}`;
       }
     }
-    
-    console.log(`fetchJSON: Final URL: ${finalUrl}`);
-    
+
     const response = await client.get(finalUrl, {
       headers: {
         ...REQUIRED_HEADERS,
@@ -62,28 +60,22 @@ export async function fetchJSON<T = any>(
       },
     });
 
-    console.log(`fetchJSON: Response status: ${response.status}`);
-
     if (response.status !== 200) {
       throw new Error(`HTTP ${response.status}: Failed to fetch ${fullUrl}`);
     }
 
-    const text = typeof response.data === "string"
-      ? response.data
-      : new TextDecoder().decode(response.data as ArrayBuffer);
+    const text =
+      typeof response.data === "string"
+        ? response.data
+        : new TextDecoder().decode(response.data as ArrayBuffer);
 
-    console.log(`fetchJSON: Response text length: ${text.length}`);
     const parsed = JSON.parse(text) as T;
-    console.log(`fetchJSON: Successfully parsed JSON`);
     return parsed;
   } catch (error) {
-    console.error(`fetchJSON: Error for ${url}:`, error);
-    console.error(`fetchJSON: Error type: ${typeof error}`);
-    console.error(`fetchJSON: Error string: ${String(error)}`);
-    if (error instanceof Error) {
-      console.error(`fetchJSON: Error message: ${error.message}`);
-      console.error(`fetchJSON: Error name: ${error.name}`);
-    }
+    console.error(
+      `fetchJSON error for ${url}:`,
+      error instanceof Error ? error.message : String(error)
+    );
     throw error;
   }
 }
@@ -97,7 +89,7 @@ export async function fetchText(
   params?: Record<string, any>
 ): Promise<string> {
   const fullUrl = url.startsWith("http") ? url : `${BASE_URL}${url}`;
-  
+
   const response = await client.get(fullUrl, {
     headers: REQUIRED_HEADERS,
     params,
@@ -133,7 +125,11 @@ export function parseMangaId(contentId: string): { id: string } {
 /**
  * Build chapter ID
  */
-export function buildChapterId(mangaId: string, chapterId: string, language?: string): string {
+export function buildChapterId(
+  mangaId: string,
+  chapterId: string,
+  language?: string
+): string {
   const lang = language || "en";
   return `weebdex:${mangaId}:${chapterId}:${lang}`;
 }
@@ -160,7 +156,12 @@ export function parseChapterId(chapterId: string): {
 /**
  * Get cover image URL
  */
-export function getCoverUrl(mangaId: string, coverId: string, ext: string = "jpg", size?: "256" | "512"): string {
+export function getCoverUrl(
+  mangaId: string,
+  coverId: string,
+  ext: string = "jpg",
+  size?: "256" | "512"
+): string {
   const extension = size ? `${size}.webp` : ext;
   return `${COVER_BASE_URL}/covers/${mangaId}/${coverId}.${extension}`;
 }
@@ -168,7 +169,12 @@ export function getCoverUrl(mangaId: string, coverId: string, ext: string = "jpg
 /**
  * Get chapter page image URL
  */
-export function getPageUrl(node: string, chapterId: string, filename: string, optimized: boolean = false): string {
+export function getPageUrl(
+  node: string,
+  chapterId: string,
+  filename: string,
+  optimized: boolean = false
+): string {
   const basePath = optimized ? "data-saver" : "data";
   // Check if node already includes protocol
   if (node.startsWith("http://") || node.startsWith("https://")) {
@@ -182,7 +188,7 @@ export function getPageUrl(node: string, chapterId: string, filename: string, op
  */
 export function proxifyImage(url: string): string {
   if (!url) return "";
-  
+
   // If already proxified or is a local asset, return as-is
   if (url.startsWith("/assets/") || url.includes("suwatte.app")) {
     return url;
@@ -211,16 +217,21 @@ export function formatDemographic(demographic?: string): string {
 /**
  * Get primary title from manga
  */
-export function getPrimaryTitle(manga: { title: string; alt_titles?: { [key: string]: string[] } }): string {
+export function getPrimaryTitle(manga: {
+  title: string;
+  alt_titles?: { [key: string]: string[] };
+}): string {
   return manga.title || "Unknown Title";
 }
 
 /**
  * Get alternative titles as a formatted string
  */
-export function getAltTitles(manga: { alt_titles?: { [key: string]: string[] } }): string {
+export function getAltTitles(manga: {
+  alt_titles?: { [key: string]: string[] };
+}): string {
   if (!manga.alt_titles) return "";
-  
+
   const titles: string[] = [];
   for (const lang in manga.alt_titles) {
     const langTitles = manga.alt_titles[lang];
@@ -228,8 +239,8 @@ export function getAltTitles(manga: { alt_titles?: { [key: string]: string[] } }
       titles.push(...langTitles);
     }
   }
-  
-  return titles.filter(t => t).join(", ");
+
+  return titles.filter((t) => t).join(", ");
 }
 
 /**
@@ -252,7 +263,7 @@ export function cleanDescription(description?: string): string {
  */
 export function formatChapterNumber(chapter?: string, volume?: string): string {
   if (!chapter && !volume) return "Oneshot";
-  
+
   let result = "";
   if (volume) {
     result += `Vol. ${volume}`;
@@ -261,7 +272,7 @@ export function formatChapterNumber(chapter?: string, volume?: string): string {
     if (result) result += " ";
     result += `Ch. ${chapter}`;
   }
-  
+
   return result || "Chapter";
 }
 
@@ -270,22 +281,26 @@ export function formatChapterNumber(chapter?: string, volume?: string): string {
  */
 export function buildQueryString(params: Record<string, any>): string {
   const parts: string[] = [];
-  
+
   for (const key in params) {
     const value = params[key];
     if (value === undefined || value === null) continue;
-    
+
     if (Array.isArray(value)) {
       for (const item of value) {
         if (item !== undefined && item !== null) {
-          parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(item))}`);
+          parts.push(
+            `${encodeURIComponent(key)}=${encodeURIComponent(String(item))}`
+          );
         }
       }
     } else {
-      parts.push(`${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`);
+      parts.push(
+        `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
+      );
     }
   }
-  
+
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }
 
@@ -294,20 +309,20 @@ export function buildQueryString(params: Record<string, any>): string {
  */
 export function normalizeLanguage(lang: string): string {
   const mapping: { [key: string]: string } = {
-    "en": "en_US",
-    "ja": "ja_JP",
-    "ko": "ko_KR",
-    "zh": "zh_CN",
+    en: "en_US",
+    ja: "ja_JP",
+    ko: "ko_KR",
+    zh: "zh_CN",
     "zh-hk": "zh_HK",
-    "es": "es_ES",
-    "fr": "fr_FR",
-    "de": "de_DE",
-    "it": "it_IT",
-    "pt": "pt_PT",
+    es: "es_ES",
+    fr: "fr_FR",
+    de: "de_DE",
+    it: "it_IT",
+    pt: "pt_PT",
     "pt-br": "pt_BR",
-    "ru": "ru_RU",
+    ru: "ru_RU",
   };
-  
+
   return mapping[lang.toLowerCase()] || lang;
 }
 
@@ -318,15 +333,15 @@ export function generateSlug(title: string): string {
   return title
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, '') // Remove special characters
-    .replace(/\s+/g, '-') // Replace spaces with hyphens
-    .replace(/-+/g, '-') // Replace multiple hyphens with single hyphen
-    .replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
+    .replace(/[^\w\s-]/g, "") // Remove special characters
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .replace(/^-+|-+$/g, ""); // Remove leading/trailing hyphens
 }
 
 /**
  * Sleep utility for rate limiting
  */
 export async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

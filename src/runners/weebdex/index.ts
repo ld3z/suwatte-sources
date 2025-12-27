@@ -74,12 +74,19 @@ export class Target
           ];
         }
       } catch (topError) {
-        console.error("Top manga endpoint failed, trying alternative:", topError);
+        console.error(
+          "Top manga endpoint failed, trying alternative:",
+          topError
+        );
       }
 
       // Fallback: Use search with empty query to get popular manga
       const searchResponse = await searchManga("", this.client, 1, 20);
-      if (searchResponse && searchResponse.data && searchResponse.data.length > 0) {
+      if (
+        searchResponse &&
+        searchResponse.data &&
+        searchResponse.data.length > 0
+      ) {
         const highlights = mangaListToHighlights(searchResponse.data);
         return [
           {
@@ -127,51 +134,22 @@ export class Target
   async getChapters(contentId: string): Promise<Chapter[]> {
     try {
       const { id } = parseMangaId(contentId);
-      console.log(`Fetching chapters for manga ID: ${id}`);
-      
       const chapters = await getAllChapters(id, this.client);
-      console.log(`Received ${chapters.length} chapters`);
-      
+
       if (!chapters || chapters.length === 0) {
-        console.log("No chapters found, returning empty array");
         return [];
       }
-      
-      // Convert to Suwatte chapters
-      const suwatteChapters: Chapter[] = [];
-      for (let i = 0; i < chapters.length; i++) {
-        const chapter = chapters[i];
-        // Use the chapter ID directly, not wrapped
-        const chapterId = chapter.id;
-        
-        // Parse chapter number
-        let chapterNum = 0;
-        if (chapter.chapter) {
-          const parsed = parseFloat(chapter.chapter);
-          if (!isNaN(parsed)) {
-            chapterNum = parsed;
-          }
-        }
 
-        // Parse volume number
-        let volumeNum: number | undefined;
-        if (chapter.volume) {
-          const parsed = parseFloat(chapter.volume);
-          if (!isNaN(parsed)) {
-            volumeNum = parsed;
-          }
-        }
-
-        // Get group names and convert to providers
+      // Convert to Suwatte chapters with single pass through chapters
+      const suwatteChapters: Chapter[] = chapters.map((chapter, index) => {
+        const chapterNum = chapter.chapter ? parseFloat(chapter.chapter) : 0;
+        const volumeNum = chapter.volume
+          ? parseFloat(chapter.volume)
+          : undefined;
         const groups = chapter.relationships?.groups || [];
-        const providers = groups.map((g) => ({
-          id: g.id,
-          name: g.name,
-        }));
-        const groupText = groups.length > 0 ? ` [${groups.map(g => g.name).join(", ")}]` : "";
 
-        // Build title with group names
-        let title = chapter.title || "";
+        // Build title efficiently
+        let title = chapter.title;
         if (!title) {
           const parts: string[] = [];
           if (chapter.volume) parts.push(`Vol. ${chapter.volume}`);
@@ -179,47 +157,40 @@ export class Target
           title = parts.length > 0 ? parts.join(" ") : "Chapter";
         }
 
-        suwatteChapters.push({
-          chapterId,
-          number: chapterNum,
-          volume: volumeNum,
+        return {
+          chapterId: chapter.id,
+          number: isNaN(chapterNum) ? 0 : chapterNum,
+          volume: isNaN(volumeNum || 0) ? undefined : volumeNum,
           title,
           language: chapter.language,
           date: new Date(chapter.published_at),
-          index: i,
-          providers: providers.length > 0 ? providers : undefined,
-        });
-      }
+          index,
+          providers:
+            groups.length > 0
+              ? groups.map((g) => ({ id: g.id, name: g.name }))
+              : undefined,
+        };
+      });
 
-      // Sort chapters: chapters without volumes first (descending by chapter number),
-      // then chapters with volumes (descending by volume, then chapter)
+      // Single sort pass with efficient comparator
       suwatteChapters.sort((a, b) => {
-        // If one has volume and other doesn't, prioritize the one without volume
         if (a.volume === undefined && b.volume !== undefined) return -1;
         if (a.volume !== undefined && b.volume === undefined) return 1;
-        
-        // Both have no volume - sort by chapter number descending
-        if (a.volume === undefined && b.volume === undefined) {
-          return b.number - a.number;
-        }
-        
-        // Both have volumes - sort by volume descending, then chapter descending
-        if (a.volume !== b.volume) {
-          return b.volume! - a.volume!;
-        }
+        if (a.volume !== b.volume) return (b.volume || 0) - (a.volume || 0);
         return b.number - a.number;
       });
 
       // Update indices after sorting
-      suwatteChapters.forEach((chapter, index) => {
-        chapter.index = index;
+      suwatteChapters.forEach((ch, i) => {
+        ch.index = i;
       });
 
       return suwatteChapters;
     } catch (error) {
-      console.error(`Failed to get chapters for ${contentId}:`, error);
-      console.error(`Error details:`, JSON.stringify(error));
-      // Return empty array instead of throwing to allow the app to continue
+      console.error(
+        `getChapters error for ${contentId}:`,
+        error instanceof Error ? error.message : String(error)
+      );
       return [];
     }
   }
@@ -247,7 +218,13 @@ export class Target
       try {
         // Try top manga first
         try {
-          const response = await getTopManga(this.client, "views", "7d", page, limit);
+          const response = await getTopManga(
+            this.client,
+            "views",
+            "7d",
+            page,
+            limit
+          );
           if (response && response.data && response.data.length > 0) {
             const highlights = mangaListToHighlights(response.data);
             return {
@@ -265,7 +242,8 @@ export class Target
           const highlights = mangaListToHighlights(response.data);
           return {
             results: highlights,
-            isLastPage: response.data.length < limit || page * limit >= response.total,
+            isLastPage:
+              response.data.length < limit || page * limit >= response.total,
           };
         }
 
@@ -289,7 +267,7 @@ export class Target
     // Search for manga
     try {
       const response = await searchManga(query, this.client, page, limit);
-      
+
       if (!response || !response.data || response.data.length === 0) {
         return {
           results: [
@@ -305,7 +283,8 @@ export class Target
       }
 
       const highlights = mangaListToHighlights(response.data);
-      const isLastPage = response.data.length < limit || page * limit >= response.total;
+      const isLastPage =
+        response.data.length < limit || page * limit >= response.total;
 
       return {
         results: highlights,

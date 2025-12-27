@@ -43,7 +43,7 @@ export function parseSeriesId(id: string): {
 
 export async function fetchSeriesHtml(
   slug: string,
-  client?: SimpleNetworkClient,
+  client?: SimpleNetworkClient
 ): Promise<{ url: string; html: string }> {
   const { seriesUrlCandidates } = parseSeriesId(`atsu|${slug}`);
   for (const url of seriesUrlCandidates) {
@@ -83,7 +83,7 @@ function getPublicationStatus(status: string): PublicationStatus | undefined {
 
 export async function getSeriesById(
   rawId: string,
-  client?: SimpleNetworkClient,
+  client?: SimpleNetworkClient
 ): Promise<Content | null> {
   try {
     // Try the detailed page API first
@@ -116,7 +116,7 @@ export async function getSeriesById(
           // Merge lists, preferring detailed entries when duplicates exist.
           mangaData.chapters = mergeChapterLists(
             detailedChapters,
-            infoData.chapters,
+            infoData.chapters
           );
         }
       }
@@ -126,15 +126,15 @@ export async function getSeriesById(
 
     if (mangaData?.title) {
       const synopsis = mangaData.synopsis;
- 
+
       // Determine cover and log poster info for debugging
       const _posterField = mangaData.poster;
       const _cover = _posterField?.image
         ? proxifyImage(`https://atsu.moe${_posterField.image}`)
         : _posterField?.id
-          ? proxifyImage(`https://atsu.moe/static/${_posterField.id}`)
-          : "/assets/cubari_logo.png";
- 
+        ? proxifyImage(`https://atsu.moe/static/${_posterField.id}`)
+        : "/assets/cubari_logo.png";
+
       const result = {
         title: mangaData.englishTitle || mangaData.title,
         cover: _cover,
@@ -158,11 +158,12 @@ export async function getSeriesById(
                 id: "tags",
                 title: "Tags",
                 tags: mangaData.tags.map(
-                  (tag: any) => ({
-                    id: tag.id || tag.name,
-                    name: tag.name,
-                    title: tag.name,
-                  }) as any,
+                  (tag: any) =>
+                    ({
+                      id: tag.id || tag.name,
+                      name: tag.name,
+                      title: tag.name,
+                    } as any)
                 ),
               },
             ] as any)
@@ -179,7 +180,7 @@ export async function getSeriesById(
   try {
     const homeApiResponse = await fetchText(
       "https://atsu.moe/api/home/page",
-      client,
+      client
     );
     const homeData: any = JSON.parse(homeApiResponse);
 
@@ -189,7 +190,9 @@ export async function getSeriesById(
           for (const item of section.items) {
             if ((item.id || item.slug) === rawId && item.title) {
               const posterUrl = item.banner || item.image;
-              const _cover = posterUrl ? proxifyImage(posterUrl) : "/assets/cubari_logo.png";
+              const _cover = posterUrl
+                ? proxifyImage(posterUrl)
+                : "/assets/cubari_logo.png";
               return {
                 title: item.title,
                 cover: _cover,
@@ -205,11 +208,12 @@ export async function getSeriesById(
                         id: "tags",
                         title: "Tags",
                         tags: (item as any).tags.map(
-                          (tag: any) => ({
-                            id: tag.id || tag.name,
-                            name: tag.name,
-                            title: tag.name,
-                          }) as any,
+                          (tag: any) =>
+                            ({
+                              id: tag.id || tag.name,
+                              name: tag.name,
+                              title: tag.name,
+                            } as any)
                         ),
                       },
                     ] as any)
@@ -239,7 +243,7 @@ export async function searchManga(
   query: string,
   client?: SimpleNetworkClient,
   page: number = 1,
-  perPage: number = 12,
+  perPage: number = 12
 ): Promise<SearchResponse | null> {
   try {
     const q = query.trim();
@@ -318,20 +322,16 @@ export async function searchManga(
       .then((txt) => ({ txt, elapsed: Date.now() - fStart }))
       .catch(() => ({ txt: null as any, elapsed: Date.now() - fStart }));
 
-    const [{ txt: pText, elapsed: pElapsed }, { txt: fText, elapsed: fElapsed }] = await Promise.all([
-      pPromise,
-      fPromise,
-    ]);
-
+    const [
+      { txt: pText, elapsed: pElapsed },
+      { txt: fText, elapsed: fElapsed },
+    ] = await Promise.all([pPromise, fPromise]);
 
     const primary = parseSafe(pText);
     const fallback = parseSafe(fText);
 
     // If either response contains an exact normalized title match, prefer and return only those exact hits.
-    const combinedHits = [
-      ...(primary?.hits ?? []),
-      ...(fallback?.hits ?? []),
-    ];
+    const combinedHits = [...(primary?.hits ?? []), ...(fallback?.hits ?? [])];
     const combinedExactHits = combinedHits.filter((h: any) => {
       const d = h?.document || {};
       const t1 = normalize(String(d.englishTitle || ""));
@@ -347,7 +347,12 @@ export async function searchManga(
         hits: combinedExactHits,
         out_of: combinedExactHits.length,
         page: 1,
-        request_params: { collection_name: "manga", first_q: q, per_page: pp, q },
+        request_params: {
+          collection_name: "manga",
+          first_q: q,
+          per_page: pp,
+          q,
+        },
         search_cutoff: false,
         search_time_ms: 0,
       } as any;
@@ -384,7 +389,10 @@ export function mergeChapterLists(detailed?: any[], info?: any[]): any[] {
   for (const c of combined) {
     if (!c) continue;
     const id =
-      c.id ?? c.chapterId ?? c._id ?? String(c.number ?? c.index ?? Math.random());
+      c.id ??
+      c.chapterId ??
+      c._id ??
+      String(c.number ?? c.index ?? Math.random());
     map.set(id, c);
   }
 
@@ -401,21 +409,23 @@ export function mergeChapterLists(detailed?: any[], info?: any[]): any[] {
   return arr;
 }
 
-
 export async function fetchAllChapters(
   mangaId: string,
-  client?: SimpleNetworkClient,
+  client?: SimpleNetworkClient
 ): Promise<Chapter[]> {
   try {
     const base = "https://atsu.moe/api/manga/chapters";
-    const firstUrl = `${base}?id=${encodeURIComponent(mangaId)}&filter=all&sort=desc&page=0`;
+    // Fetch first page to get total count
+    const firstUrl = `${base}?id=${encodeURIComponent(
+      mangaId
+    )}&filter=all&sort=desc&page=0`;
     const firstTxt = await fetchText(firstUrl, client);
     if (!firstTxt) return [];
+
     let firstJson: any = null;
     try {
       firstJson = JSON.parse(firstTxt);
     } catch {
-      // If parse fails, return empty
       return [];
     }
 
@@ -427,19 +437,24 @@ export async function fetchAllChapters(
       collected.push(...firstJson.chapters);
     }
 
-    // Pages indicated by `pages` are expected to be the count of pages.
+    // Only fetch additional pages if they exist
+    // Pages indicated by `pages` are the count of pages.
     // The API uses zero-based page indices (page=0 is the first page), so iterate from 1 to totalPages - 1.
-    for (let p = 1; p < totalPages; p++) {
-      try {
-        const url = `${base}?id=${encodeURIComponent(mangaId)}&filter=all&sort=desc&page=${p}`;
-        const txt = await fetchText(url, client);
-        if (!txt) continue;
-        const j = JSON.parse(txt);
-        if (Array.isArray(j?.chapters)) {
-          collected.push(...j.chapters);
+    if (totalPages > 1) {
+      for (let p = 1; p < totalPages; p++) {
+        try {
+          const url = `${base}?id=${encodeURIComponent(
+            mangaId
+          )}&filter=all&sort=desc&page=${p}`;
+          const txt = await fetchText(url, client);
+          if (!txt) continue;
+          const j = JSON.parse(txt);
+          if (Array.isArray(j?.chapters)) {
+            collected.push(...j.chapters);
+          }
+        } catch {
+          // Ignore individual page failures and continue
         }
-      } catch {
-        // Ignore individual page failures and continue
       }
     }
 
@@ -447,19 +462,21 @@ export async function fetchAllChapters(
     if (!collected || collected.length === 0) return [];
 
     const hasIndex = collected.some(
-      (c: any) => c.index !== undefined && c.index !== null,
+      (c: any) => c.index !== undefined && c.index !== null
     );
     const hasNumber = collected.some(
-      (c: any) => c.number !== undefined && c.number !== null,
+      (c: any) => c.number !== undefined && c.number !== null
     );
 
     const copy = [...collected];
 
     if (hasIndex) {
-      copy.sort((a: any, b: any) => Number(b.index ?? 0) - Number(a.index ?? 0));
+      copy.sort(
+        (a: any, b: any) => Number(b.index ?? 0) - Number(a.index ?? 0)
+      );
     } else if (hasNumber) {
       copy.sort(
-        (a: any, b: any) => Number(b.number ?? 0) - Number(a.number ?? 0),
+        (a: any, b: any) => Number(b.number ?? 0) - Number(a.number ?? 0)
       );
     } else {
       copy.reverse();
@@ -474,8 +491,8 @@ export async function fetchAllChapters(
         chapter.number !== undefined && chapter.number !== null
           ? Number(chapter.number)
           : hasIndex && chapter.index !== undefined && chapter.index !== null
-            ? Number(chapter.index)
-            : idx + 1;
+          ? Number(chapter.index)
+          : idx + 1;
 
       let dateObj: Date | undefined;
 
@@ -509,7 +526,8 @@ export async function fetchAllChapters(
 
       if (
         !dateObj &&
-        (chapter.timestamp !== undefined && chapter.timestamp !== null)
+        chapter.timestamp !== undefined &&
+        chapter.timestamp !== null
       ) {
         const n = Number(chapter.timestamp);
         if (!Number.isNaN(n)) {
@@ -543,7 +561,7 @@ export async function fetchAllChapters(
 export async function getChapterData(
   mangaId: string,
   chapterId: string,
-  client?: SimpleNetworkClient,
+  client?: SimpleNetworkClient
 ): Promise<any> {
   try {
     const apiUrl = `https://atsu.moe/api/read/chapter?mangaId=${mangaId}&chapterId=${chapterId}`;
@@ -562,7 +580,7 @@ export async function getChapterData(
 
 export async function extractHomeSectionsFromPrefetch(
   html: string,
-  baseUrl: string,
+  baseUrl: string
 ): Promise<PageSection[]> {
   const m = html.match(/window\.homePage\s*=\s*(\{[\s\S]*?\});/);
   let data: any;
@@ -679,12 +697,20 @@ export async function extractHomeSectionsFromPrefetch(
         const lower = normalizedImg.toLowerCase();
 
         // If it contains '/posters/' but not '/static/posters/', convert safely.
-        if (lower.includes("/posters/") && !lower.includes("/static/posters/")) {
-          normalizedImg = normalizedImg.split("/posters/").join("/static/posters/");
+        if (
+          lower.includes("/posters/") &&
+          !lower.includes("/static/posters/")
+        ) {
+          normalizedImg = normalizedImg
+            .split("/posters/")
+            .join("/static/posters/");
         }
 
         // Collapse repeated '/static/posters/' occurrences into a single segment.
-        normalizedImg = normalizedImg.replace(/(\/static\/posters\/)+/gi, "/static/posters/");
+        normalizedImg = normalizedImg.replace(
+          /(\/static\/posters\/)+/gi,
+          "/static/posters/"
+        );
 
         // Ensure host is present for site-relative paths.
         if (/^\/static\/posters\//i.test(normalizedImg)) {
@@ -693,12 +719,13 @@ export async function extractHomeSectionsFromPrefetch(
       }
 
       // Use proxifyImage as the final safety net.
-      let _cover = normalizedImg ? proxifyImage(normalizedImg) : "/assets/cubari_logo.png";
+      let _cover = normalizedImg
+        ? proxifyImage(normalizedImg)
+        : "/assets/cubari_logo.png";
 
-  
       const h: Highlight = { id, title, cover: _cover } as Highlight;
       if (it.chapter?.title) h.subtitle = it.chapter.title;
-  
+
       items.push(h);
     }
 
@@ -711,7 +738,9 @@ export async function extractHomeSectionsFromPrefetch(
       title,
       items,
       style:
-        s.type === "slideshow" ? SectionStyle.GALLERY : SectionStyle.STANDARD_GRID,
+        s.type === "slideshow"
+          ? SectionStyle.GALLERY
+          : SectionStyle.STANDARD_GRID,
     } as any;
     out.push(section);
   }

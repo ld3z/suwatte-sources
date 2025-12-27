@@ -37,6 +37,21 @@ export class Target
   private client: SimpleNetworkClient = new NetworkClient();
   private hideNSFW: boolean = false;
 
+  constructor() {
+    this.initializePreferences();
+  }
+
+  private async initializePreferences(): Promise<void> {
+    try {
+      const stored = await ObjectStore.boolean("comix_hide_nsfw");
+      if (stored !== null) {
+        this.hideNSFW = stored;
+      }
+    } catch (error) {
+      console.error("Failed to load preference:", error);
+    }
+  }
+
   // --- PageLinkResolver ---
   async resolvePageSection(
     _link: PageLink,
@@ -491,6 +506,11 @@ export class Target
               value: this.hideNSFW,
               didChange: async (value: boolean) => {
                 this.hideNSFW = value;
+                try {
+                  await ObjectStore.set("comix_hide_nsfw", value);
+                } catch (error) {
+                  console.error("Failed to save preference:", error);
+                }
               },
             }),
           ],

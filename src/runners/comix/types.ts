@@ -58,6 +58,7 @@ export interface Chapter {
   name?: string;
   votes: number;
   updated_at: number; // Unix timestamp in seconds
+  is_official: 0 | 1;
   scanlation_group?: ScanlationGroup;
 }
 

@@ -340,10 +340,13 @@ function formatChaptersForComix(
   chapters: ComixChapter[],
   hashId: string
 ): Chapter[] {
-  // Sort chapters by number desc, then by updated_at desc (to show newer versions first for same chapter)
+  // Sort chapters by number desc, then by official status desc, then by updated_at desc
   chapters.sort((a, b) => {
     if (a.number !== b.number) {
       return b.number - a.number;
+    }
+    if (a.is_official !== b.is_official) {
+      return b.is_official - a.is_official;
     }
     return b.updated_at - a.updated_at;
   });
@@ -366,13 +369,15 @@ function formatChaptersForComix(
         ? [
             {
               id: chapter.scanlation_group_id.toString(),
-              name: chapter.scanlation_group.name,
+              name: chapter.is_official
+                ? `${chapter.scanlation_group.name} (Official)`
+                : chapter.scanlation_group.name,
             },
           ]
         : [
             {
               id: `unknown_${hashId}`,
-              name: "Unknown",
+              name: chapter.is_official ? "Official" : "Unknown",
             },
           ],
       webUrl: `${BASE_URL}/title/${hashId}/${chapter.chapter_id}`,

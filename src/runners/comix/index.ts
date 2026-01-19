@@ -36,6 +36,7 @@ export class Target
   info = INFO;
   private client: SimpleNetworkClient = new NetworkClient();
   private hideNSFW: boolean = false;
+  private dedupChapters: boolean = false;
 
   constructor() {
     this.initializePreferences();
@@ -46,6 +47,10 @@ export class Target
       const stored = await ObjectStore.boolean("comix_hide_nsfw");
       if (stored !== null) {
         this.hideNSFW = stored;
+      }
+      const dedupStored = await ObjectStore.boolean("comix_dedup_chapters");
+      if (dedupStored !== null) {
+        this.dedupChapters = dedupStored;
       }
     } catch (error) {
       console.error("Failed to load preference:", error);
@@ -182,7 +187,7 @@ export class Target
   async getChapters(contentId: string): Promise<Chapter[]> {
     try {
       const { hashId } = parseMangaId(contentId);
-      const chapters = await getAllChapters(hashId, this.client);
+      const chapters = await getAllChapters(hashId, this.client, this.dedupChapters);
       return chapters;
     } catch (error) {
       if (error instanceof Error) {
@@ -508,6 +513,19 @@ export class Target
                 this.hideNSFW = value;
                 try {
                   await ObjectStore.set("comix_hide_nsfw", value);
+                } catch (error) {
+                  console.error("Failed to save preference:", error);
+                }
+              },
+            }),
+            UIToggle({
+              id: "dedup_chapters",
+              title: "Deduplicate Chapters",
+              value: this.dedupChapters,
+              didChange: async (value: boolean) => {
+                this.dedupChapters = value;
+                try {
+                  await ObjectStore.set("comix_dedup_chapters", value);
                 } catch (error) {
                   console.error("Failed to save preference:", error);
                 }

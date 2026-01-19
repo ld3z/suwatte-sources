@@ -25,6 +25,44 @@ import {
   Term,
 } from "./types";
 
+// Helper functions for deduplication
+function isOfficialLike(chapter: ComixChapter): boolean {
+  return chapter.is_official === 1;
+}
+
+function isBetter(newChapter: ComixChapter, currentChapter: ComixChapter): boolean {
+  const officialNew = isOfficialLike(newChapter);
+  const officialCur = isOfficialLike(currentChapter);
+
+  if (officialNew && !officialCur) {
+    return true;
+  }
+  if (!officialNew && officialCur) {
+    return false;
+  }
+
+  if (newChapter.votes > currentChapter.votes) {
+    return true;
+  }
+  if (newChapter.votes < currentChapter.votes) {
+    return false;
+  }
+
+  return newChapter.updated_at > currentChapter.updated_at;
+}
+
+function dedupInsert(
+  map: Map<string, ComixChapter>,
+  chapter: ComixChapter
+): void {
+  const key = chapter.number.toString();
+  const current = map.get(key);
+
+  if (!current || isBetter(chapter, current)) {
+    map.set(key, chapter);
+  }
+}
+
 // Polyfill for environments without URLSearchParams (e.g., embedded JS runtimes)
 // Provides append(key, value) and toString() methods.
 function makeParams() {
@@ -292,7 +330,8 @@ export async function searchManga(
 // Get all chapters for a manga (parallel pagination for speed)
 export async function getAllChapters(
   hashId: string,
-  client: SimpleNetworkClient
+  client: SimpleNetworkClient,
+  deduplicate: boolean = false
 ): Promise<Chapter[]> {
   // Fetch first page to get total count
   const firstUrl = `${API_URL}/manga/${hashId}/chapters?order[number]=desc&limit=100&page=1`;
@@ -302,12 +341,23 @@ export async function getAllChapters(
       ? JSON.parse(firstResponse)
       : firstResponse;
 
-  const chapters: ComixChapter[] = [...firstData.result.items];
+  const chapterMap = new Map<string, ComixChapter>();
+  const chapterList: ComixChapter[] = [];
+
+  if (deduplicate) {
+    firstData.result.items.forEach((item) => dedupInsert(chapterMap, item));
+  } else {
+    chapterList.push(...firstData.result.items);
+  }
+
   const totalPages = firstData.result.pagination.last_page;
 
   // If there's only one page, format and return immediately
   if (totalPages <= 1) {
-    return formatChaptersForComix(chapters, hashId);
+    if (deduplicate) {
+      return formatChaptersForComix(Array.from(chapterMap.values()), hashId, true);
+    }
+    return formatChaptersForComix(chapterList, hashId);
   }
 
   // Fetch remaining pages in parallel (max 5 concurrent to respect rate limits)
@@ -329,27 +379,42 @@ export async function getAllChapters(
     });
 
     const results = await Promise.all(promises);
-    results.forEach((items) => chapters.push(...items));
+    results.forEach((items) => {
+      if (deduplicate) {
+        items.forEach((item) => dedupInsert(chapterMap, item));
+      } else {
+        chapterList.push(...items);
+      }
+    });
   }
 
-  return formatChaptersForComix(chapters, hashId);
+  if (deduplicate) {
+    return formatChaptersForComix(Array.from(chapterMap.values()), hashId, true);
+  }
+  return formatChaptersForComix(chapterList, hashId);
 }
 
 // Format raw chapters into Suwatte chapters
 function formatChaptersForComix(
   chapters: ComixChapter[],
-  hashId: string
+  hashId: string,
+  deduplicated: boolean = false
 ): Chapter[] {
-  // Sort chapters by number desc, then by official status desc, then by updated_at desc
-  chapters.sort((a, b) => {
-    if (a.number !== b.number) {
-      return b.number - a.number;
-    }
-    if (a.is_official !== b.is_official) {
-      return b.is_official - a.is_official;
-    }
-    return b.updated_at - a.updated_at;
-  });
+  // Sort chapters by number desc (and optionally by other criteria)
+  if (deduplicated) {
+    chapters.sort((a, b) => b.number - a.number);
+  } else {
+    // Sort chapters by number desc, then by official status desc, then by updated_at desc
+    chapters.sort((a, b) => {
+      if (a.number !== b.number) {
+        return b.number - a.number;
+      }
+      if (a.is_official !== b.is_official) {
+        return b.is_official - a.is_official;
+      }
+      return b.updated_at - a.updated_at;
+    });
+  }
 
   // Convert to Suwatte chapters
   return chapters.map((chapter, index) => {

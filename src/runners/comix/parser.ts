@@ -358,6 +358,28 @@ function formatChaptersForComix(
       title += ": " + chapter.name;
     }
 
+    let providers = [];
+    
+    if (chapter.is_official === 1) {
+      // Official chapter
+      providers.push({
+        id: "official",
+        name: "Official",
+      });
+    } else if (chapter.scanlation_group) {
+      // Scanlation group chapter
+      providers.push({
+        id: chapter.scanlation_group_id.toString(),
+        name: chapter.scanlation_group.name,
+      });
+    } else {
+      // Unknown provider
+      providers.push({
+        id: `unknown_${hashId}`,
+        name: "Unknown",
+      });
+    }
+
     return {
       chapterId: buildChapterId(chapter.chapter_id),
       number: chapter.number,
@@ -365,21 +387,7 @@ function formatChaptersForComix(
       language: "en",
       date: new Date(chapter.updated_at * 1000),
       index,
-      providers: chapter.scanlation_group
-        ? [
-            {
-              id: chapter.scanlation_group_id.toString(),
-              name: chapter.is_official
-                ? `${chapter.scanlation_group.name} (Official)`
-                : chapter.scanlation_group.name,
-            },
-          ]
-        : [
-            {
-              id: `unknown_${hashId}`,
-              name: chapter.is_official ? "Official" : "Unknown",
-            },
-          ],
+      providers,
       webUrl: `${BASE_URL}/title/${hashId}/${chapter.chapter_id}`,
     };
   });

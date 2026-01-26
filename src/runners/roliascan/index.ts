@@ -23,6 +23,7 @@ import {
     getMangaDetails,
     getChapters,
     getChapterPages,
+    getLatestUpdates,
 } from "./parser";
 
 export class Target
@@ -45,12 +46,19 @@ export class Target
     async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
         try {
             const highlights = await getPopularManga(this.client);
+            const latest = await getLatestUpdates(this.client);
             return [
                 {
                     id: "popular",
-                    title: "Most Viewed",
-                    style: SectionStyle.STANDARD_GRID,
+                    title: "Popular Lately",
+                    style: SectionStyle.GALLERY,
                     items: highlights,
+                },
+                {
+                    id: "latest",
+                    title: "Latest Updates",
+                    style: SectionStyle.STANDARD_GRID,
+                    items: latest,
                 },
             ];
         } catch (error: any) {

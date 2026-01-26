@@ -78,6 +78,37 @@ export async function searchManga(
 }
 
 /**
+ * Get latest updates from manga list page
+ */
+export async function getLatestUpdates(
+    client: SimpleNetworkClient
+): Promise<Highlight[]> {
+    const url = `${BASE_URL}/manga?m_orderby=latest`;
+    const html = await fetchText(url, client);
+    const $ = parseDoc(html);
+
+    const results: Highlight[] = [];
+
+    $("div.post").each((_, el) => {
+        const $el = $(el);
+        const $link = $el.find("h6 a").first();
+        const title = $link.text().trim();
+        const href = $link.attr("href") || "";
+        const cover = $el.find("img").first().attr("src") || "";
+
+        if (title && href) {
+            results.push({
+                id: buildContentId(extractSlug(href)),
+                title,
+                cover: toAbsoluteUrl(BASE_URL, cover),
+            });
+        }
+    });
+
+    return results;
+}
+
+/**
  * Get manga details from detail page
  */
 export async function getMangaDetails(

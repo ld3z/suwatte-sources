@@ -28,7 +28,10 @@ export async function getPopularManga(
     const data = await fetchJSON<PopularWrapper>(url, client);
 
     return data.most_viewed_series
-        .filter((m) => m.title && m.title.trim().length > 0)
+        .filter((m) => {
+            if (!m.title || m.title.trim().length === 0) return false;
+            return m.title.toLowerCase() !== "roliascan";
+        })
         .map((m) => ({
             id: buildContentId(extractSlug(m.url)),
             title: m.title,

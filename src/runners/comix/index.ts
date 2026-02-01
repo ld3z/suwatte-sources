@@ -31,7 +31,11 @@ import {
 } from "./parser";
 
 export class Target
-  implements ContentSource, ImageRequestHandler, PageLinkResolver, RunnerPreferenceProvider
+  implements
+    ContentSource,
+    ImageRequestHandler,
+    PageLinkResolver,
+    RunnerPreferenceProvider
 {
   info = INFO;
   private client: SimpleNetworkClient = new NetworkClient();
@@ -60,7 +64,7 @@ export class Target
   // --- PageLinkResolver ---
   async resolvePageSection(
     _link: PageLink,
-    _sectionID: string
+    _sectionID: string,
   ): Promise<ResolvedPageSection> {
     throw new Error("Method not implemented.");
   }
@@ -136,13 +140,21 @@ export class Target
       ];
     } catch (error) {
       if (error instanceof Error) {
-        console.error("getSectionsForPage: Failed to load home sections:", error.message);
+        console.error(
+          "getSectionsForPage: Failed to load home sections:",
+          error.message,
+        );
         console.error(error.stack);
       } else {
         try {
-          console.error("getSectionsForPage: Failed to load home sections:", JSON.stringify(error));
+          console.error(
+            "getSectionsForPage: Failed to load home sections:",
+            JSON.stringify(error),
+          );
         } catch {
-          console.error("getSectionsForPage: Failed to load home sections: (unserializable error)");
+          console.error(
+            "getSectionsForPage: Failed to load home sections: (unserializable error)",
+          );
         }
       }
       return [
@@ -175,29 +187,48 @@ export class Target
         console.error(error.stack);
       } else {
         try {
-          console.error(`Failed to get content ${contentId}:`, JSON.stringify(error));
+          console.error(
+            `Failed to get content ${contentId}:`,
+            JSON.stringify(error),
+          );
         } catch {
-          console.error(`Failed to get content ${contentId}: (unserializable error)`);
+          console.error(
+            `Failed to get content ${contentId}: (unserializable error)`,
+          );
         }
       }
-      throw new Error(`Failed to load manga: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to load manga: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
   async getChapters(contentId: string): Promise<Chapter[]> {
     try {
       const { hashId } = parseMangaId(contentId);
-      const chapters = await getAllChapters(hashId, this.client, this.dedupChapters);
+      const chapters = await getAllChapters(
+        hashId,
+        this.client,
+        this.dedupChapters,
+      );
       return chapters;
     } catch (error) {
       if (error instanceof Error) {
-        console.error(`Failed to get chapters for ${contentId}:`, error.message);
+        console.error(
+          `Failed to get chapters for ${contentId}:`,
+          error.message,
+        );
         console.error(error.stack);
       } else {
         try {
-          console.error(`Failed to get chapters for ${contentId}:`, JSON.stringify(error));
+          console.error(
+            `Failed to get chapters for ${contentId}:`,
+            JSON.stringify(error),
+          );
         } catch {
-          console.error(`Failed to get chapters for ${contentId}: (unserializable error)`);
+          console.error(
+            `Failed to get chapters for ${contentId}: (unserializable error)`,
+          );
         }
       }
       // Return empty array instead of throwing to allow the app to continue
@@ -207,22 +238,32 @@ export class Target
 
   async getChapterData(
     _contentId: string,
-    chapterId: string
+    chapterId: string,
   ): Promise<ChapterData> {
     try {
       return await getChapterData(chapterId, this.client);
     } catch (error) {
       if (error instanceof Error) {
-        console.error(`Failed to get chapter data for ${chapterId}:`, error.message);
+        console.error(
+          `Failed to get chapter data for ${chapterId}:`,
+          error.message,
+        );
         console.error(error.stack);
       } else {
         try {
-          console.error(`Failed to get chapter data for ${chapterId}:`, JSON.stringify(error));
+          console.error(
+            `Failed to get chapter data for ${chapterId}:`,
+            JSON.stringify(error),
+          );
         } catch {
-          console.error(`Failed to get chapter data for ${chapterId}: (unserializable error)`);
+          console.error(
+            `Failed to get chapter data for ${chapterId}: (unserializable error)`,
+          );
         }
       }
-      throw new Error(`Failed to load chapter pages: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to load chapter pages: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -234,11 +275,13 @@ export class Target
     if (!query) {
       try {
         // Check if any filters are applied
-        const hasFilters = request.filters && Object.keys(request.filters).some(key => {
-          const val = request.filters![key];
-          if (Array.isArray(val)) return val.length > 0;
-          return val && val !== "";
-        });
+        const hasFilters =
+          request.filters &&
+          Object.keys(request.filters).some((key) => {
+            const val = request.filters![key];
+            if (Array.isArray(val)) return val.length > 0;
+            return val && val !== "";
+          });
 
         let response;
         if (hasFilters) {
@@ -253,12 +296,15 @@ export class Target
           // Filter out NSFW content if hide_nsfw is enabled
           let filteredItems = response.result.items;
           if (this.hideNSFW) {
-            filteredItems = response.result.items.filter(manga => !manga.is_nsfw);
+            filteredItems = response.result.items.filter(
+              (manga) => !manga.is_nsfw,
+            );
           }
 
           const highlights = mangaListToHighlights(filteredItems);
           const isLastPage =
-            response.result.pagination.current_page >= response.result.pagination.last_page;
+            response.result.pagination.current_page >=
+            response.result.pagination.last_page;
 
           return {
             results: highlights,
@@ -273,9 +319,14 @@ export class Target
           console.error(error.stack);
         } else {
           try {
-            console.error("getDirectory: Failed to load browse:", JSON.stringify(error));
+            console.error(
+              "getDirectory: Failed to load browse:",
+              JSON.stringify(error),
+            );
           } catch {
-            console.error("getDirectory: Failed to load browse: (unserializable error)");
+            console.error(
+              "getDirectory: Failed to load browse: (unserializable error)",
+            );
           }
         }
         return {
@@ -294,8 +345,13 @@ export class Target
 
     // Search for manga
     try {
-      const response = await searchManga(query, this.client, page, request.filters);
-      
+      const response = await searchManga(
+        query,
+        this.client,
+        page,
+        request.filters,
+      );
+
       if (!response?.result?.items || response.result.items.length === 0) {
         return {
           results: [
@@ -313,12 +369,13 @@ export class Target
       // Filter out NSFW content if hide_nsfw is enabled
       let filteredItems = response.result.items;
       if (this.hideNSFW) {
-        filteredItems = response.result.items.filter(manga => !manga.is_nsfw);
+        filteredItems = response.result.items.filter((manga) => !manga.is_nsfw);
       }
 
       const highlights = mangaListToHighlights(filteredItems);
       const isLastPage =
-        response.result.pagination.current_page >= response.result.pagination.last_page;
+        response.result.pagination.current_page >=
+        response.result.pagination.last_page;
 
       return {
         results: highlights,
@@ -406,17 +463,21 @@ export class Target
           title: "Genres",
           options: [
             { id: "6", title: "Action" },
+            { id: "87264", title: "Adult" },
             { id: "7", title: "Adventure" },
             { id: "8", title: "Boys Love" },
             { id: "9", title: "Comedy" },
             { id: "10", title: "Crime" },
             { id: "11", title: "Drama" },
+            { id: "87265", title: "Ecchi" },
             { id: "12", title: "Fantasy" },
             { id: "13", title: "Girls Love" },
+            { id: "87266", title: "Hentai" },
             { id: "14", title: "Historical" },
             { id: "15", title: "Horror" },
             { id: "16", title: "Isekai" },
             { id: "17", title: "Magical Girls" },
+            { id: "87267", title: "Mature" },
             { id: "18", title: "Mecha" },
             { id: "19", title: "Medical" },
             { id: "20", title: "Mystery" },
@@ -425,6 +486,7 @@ export class Target
             { id: "23", title: "Romance" },
             { id: "24", title: "Sci-Fi" },
             { id: "25", title: "Slice of Life" },
+            { id: "87268", title: "Smut" },
             { id: "26", title: "Sports" },
             { id: "27", title: "Superhero" },
             { id: "28", title: "Thriller" },

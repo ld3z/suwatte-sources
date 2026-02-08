@@ -477,7 +477,7 @@ export class Target
           ],
         },
         {
-          type: FilterType.MULTISELECT,
+          type: FilterType.EXCLUDABLE_MULTISELECT,
           id: "genres",
           title: "Genres",
           options: [

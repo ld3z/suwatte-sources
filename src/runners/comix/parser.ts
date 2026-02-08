@@ -297,11 +297,27 @@ export async function searchManga(
       });
     }
 
-    // Genres (include)
-    if (filters.genres && Array.isArray(filters.genres)) {
-      filters.genres.forEach((genre: string) => {
-        params.append("genres[]", genre);
-      });
+    // Genres (include/exclude)
+    // Using EXCLUDABLE_MULTISELECT format: { included: string[], excluded: string[] }
+    if (filters.genres) {
+      // Check if it's the new format (object with included/excluded)
+      if (typeof filters.genres === 'object' && !Array.isArray(filters.genres)) {
+        const genreFilter = filters.genres as { included?: string[]; excluded?: string[] };
+        
+        // Add include genres
+        if (genreFilter.included && Array.isArray(genreFilter.included)) {
+          genreFilter.included.forEach((genre: string) => {
+            params.append("genres[]", genre);
+          });
+        }
+        
+        // Add exclude genres
+        if (genreFilter.excluded && Array.isArray(genreFilter.excluded)) {
+          genreFilter.excluded.forEach((genre: string) => {
+            params.append("exclude_genres[]", genre);
+          });
+        }
+      }
     }
 
     // Year from

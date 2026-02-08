@@ -5,6 +5,7 @@ import {
   PageSection,
   SectionStyle,
   PublicationStatus,
+  Provider,
 } from "@suwatte/daisuke";
 import { fetchText, proxifyImage, SimpleNetworkClient } from "./helpers";
 import {
@@ -414,20 +415,45 @@ export async function fetchAllChapters(
   client?: SimpleNetworkClient
 ): Promise<Chapter[]> {
   try {
-    const url = `https://atsu.moe/api/manga/allChapters?mangaId=${encodeURIComponent(
-      mangaId
-    )}`;
-    const txt = await fetchText(url, client);
-    if (!txt) return [];
+    // Fetch chapters and scanlators in parallel
+    const [chaptersUrl, pageUrl] = [
+      `https://atsu.moe/api/manga/allChapters?mangaId=${encodeURIComponent(
+        mangaId
+      )}`,
+      `https://atsu.moe/api/manga/page?id=${encodeURIComponent(mangaId)}`,
+    ];
 
-    let data: any = null;
+    const [chaptersTxt, pageTxt] = await Promise.all([
+      fetchText(chaptersUrl, client),
+      fetchText(pageUrl, client),
+    ]);
+
+    if (!chaptersTxt) return [];
+
+    let chaptersData: any = null;
     try {
-      data = JSON.parse(txt);
+      chaptersData = JSON.parse(chaptersTxt);
     } catch {
       return [];
     }
 
-    const collected = Array.isArray(data?.chapters) ? data.chapters : [];
+    const collected = Array.isArray(chaptersData?.chapters) ? chaptersData.chapters : [];
+
+    // Fetch and map scanlators
+    const scanlatorMap = new Map<string, { id: string; name: string }>();
+    if (pageTxt) {
+      try {
+        const pageData = JSON.parse(pageTxt);
+        const scanlators = pageData?.mangaPage?.scanlators ?? [];
+        for (const s of scanlators) {
+          if (s.id && s.name) {
+            scanlatorMap.set(s.id, { id: s.id, name: s.name });
+          }
+        }
+      } catch {
+        // Ignore scanlators fetch errors
+      }
+    }
 
     // Convert the aggregated raw chapters into the standardized Chapter[] type.
     if (!collected || collected.length === 0) return [];
@@ -510,7 +536,19 @@ export async function fetchAllChapters(
         dateObj = new Date(1000 * idx);
       }
 
-      return {
+      // Map scanlators to providers
+      const providers: Provider[] = [];
+      if (chapter.scanlationMangaId && scanlatorMap.has(chapter.scanlationMangaId)) {
+        const scanlator = scanlatorMap.get(chapter.scanlationMangaId);
+        if (scanlator) {
+          providers.push({
+            id: scanlator.id,
+            name: scanlator.name,
+          });
+        }
+      }
+
+      const chapterObj: any = {
         id,
         chapterId: id,
         number: chapterNumber,
@@ -520,7 +558,14 @@ export async function fetchAllChapters(
         index: idx,
         pageCount: chapter.pageCount ?? chapter.pages ?? 0,
         progress: null,
-      } as Chapter;
+      };
+
+      // Add providers if any
+      if (providers.length > 0) {
+        chapterObj.providers = providers;
+      }
+
+      return chapterObj as Chapter;
     });
 
     return result;

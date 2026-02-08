@@ -414,49 +414,20 @@ export async function fetchAllChapters(
   client?: SimpleNetworkClient
 ): Promise<Chapter[]> {
   try {
-    const base = "https://atsu.moe/api/manga/chapters";
-    // Fetch first page to get total count
-    const firstUrl = `${base}?id=${encodeURIComponent(
+    const url = `https://atsu.moe/api/manga/allChapters?mangaId=${encodeURIComponent(
       mangaId
-    )}&filter=all&sort=desc&page=0`;
-    const firstTxt = await fetchText(firstUrl, client);
-    if (!firstTxt) return [];
+    )}`;
+    const txt = await fetchText(url, client);
+    if (!txt) return [];
 
-    let firstJson: any = null;
+    let data: any = null;
     try {
-      firstJson = JSON.parse(firstTxt);
+      data = JSON.parse(txt);
     } catch {
       return [];
     }
 
-    const totalPages = Number(firstJson?.pages ?? 0);
-    const collected: any[] = [];
-
-    // If the first response contains chapters, add them
-    if (Array.isArray(firstJson?.chapters)) {
-      collected.push(...firstJson.chapters);
-    }
-
-    // Only fetch additional pages if they exist
-    // Pages indicated by `pages` are the count of pages.
-    // The API uses zero-based page indices (page=0 is the first page), so iterate from 1 to totalPages - 1.
-    if (totalPages > 1) {
-      for (let p = 1; p < totalPages; p++) {
-        try {
-          const url = `${base}?id=${encodeURIComponent(
-            mangaId
-          )}&filter=all&sort=desc&page=${p}`;
-          const txt = await fetchText(url, client);
-          if (!txt) continue;
-          const j = JSON.parse(txt);
-          if (Array.isArray(j?.chapters)) {
-            collected.push(...j.chapters);
-          }
-        } catch {
-          // Ignore individual page failures and continue
-        }
-      }
-    }
+    const collected = Array.isArray(data?.chapters) ? data.chapters : [];
 
     // Convert the aggregated raw chapters into the standardized Chapter[] type.
     if (!collected || collected.length === 0) return [];

@@ -86,7 +86,7 @@ export async function searchManga(
 export async function getLatestUpdates(
     client: SimpleNetworkClient
 ): Promise<Highlight[]> {
-    const url = `${BASE_URL}/manga?m_orderby=latest`;
+    const url = `${BASE_URL}/updated-mangas0/`;
     const html = await fetchText(url, client);
     const $ = parseDoc(html);
 

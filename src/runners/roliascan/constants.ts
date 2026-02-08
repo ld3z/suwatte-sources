@@ -3,7 +3,7 @@ import { CatalogRating, RunnerInfo } from "@suwatte/daisuke";
 export const INFO: RunnerInfo = {
     id: "com.roliascan",
     name: "RoliaScan",
-    version: 0.2,
+    version: 0.3,
     website: "https://roliascan.com",
     supportedLanguages: ["en_US"],
     thumbnail: "roliascan_logo.png",

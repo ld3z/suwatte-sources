@@ -56,7 +56,7 @@ export interface MangaPage {
     id:                    string;
     authors:               Author[];
     banner:                Banner;
-    tags:                  Tag[];
+    genres:                Tag[];
     englishTitle:          string;
     poster:                Poster;
     isInitiallyBookmarked: boolean;

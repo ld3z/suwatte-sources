@@ -152,12 +152,12 @@ export async function getSeriesById(
         status: mangaData.status
           ? getPublicationStatus(mangaData.status)
           : undefined,
-        properties: mangaData.tags
+        properties: mangaData.genres
           ? ([
               {
-                id: "tags",
-                title: "Tags",
-                tags: mangaData.tags.map(
+                id: "genres",
+                title: "Genres",
+                tags: mangaData.genres.map(
                   (tag: any) =>
                     ({
                       id: tag.id || tag.name,
@@ -205,8 +205,8 @@ export async function getSeriesById(
                 properties: (item as any)?.tags
                   ? ([
                       {
-                        id: "tags",
-                        title: "Tags",
+                        id: "genres",
+                        title: "Genres",
                         tags: (item as any).tags.map(
                           (tag: any) =>
                             ({

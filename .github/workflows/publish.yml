@@ -44,6 +44,7 @@ jobs:
           sed -i 's|/assets/weebdex_logo.png|https://ld3z.github.io/suwatte-sources/assets/weebdex_logo.png|g' stt/index.html
           sed -i 's|/assets/comix_logo.png|https://ld3z.github.io/suwatte-sources/assets/comix_logo.png|g' stt/index.html
           sed -i 's|/assets/roliascan_logo.png|https://ld3z.github.io/suwatte-sources/assets/roliascan_logo.png|g' stt/index.html
+          sed -i 's|/assets/mangaball_logo.png|https://ld3z.github.io/suwatte-sources/assets/mangaball_logo.png|g' stt/index.html
 
       - name: Upload Pages Artifact
         uses: actions/upload-pages-artifact@v3

@@ -29,6 +29,7 @@ import {
     THEME_OPTIONS,
     DEMOGRAPHIC_OPTIONS,
     STATUS_OPTIONS,
+    LANGUAGE_OPTIONS,
 } from "./constants";
 import { MangaBallClient } from "./helpers";
 import {
@@ -203,6 +204,7 @@ export class Target
                 sort?: string;
                 demographic?: string;
                 status?: string;
+                language?: string;
                 tagIncluded?: string[];
                 tagExcluded?: string[];
                 tagIncludeMode?: string;
@@ -218,6 +220,9 @@ export class Target
                 }
                 if (request.filters.status) {
                     filters.status = request.filters.status as string;
+                }
+                if (request.filters.language) {
+                    filters.language = request.filters.language as string;
                 }
                 if (request.filters.tag_include_mode) {
                     filters.tagIncludeMode = request.filters.tag_include_mode as string;
@@ -288,6 +293,12 @@ export class Target
                     id: "status",
                     title: "Publication Status",
                     options: STATUS_OPTIONS.map(([title, id]) => ({ id, title })),
+                },
+                {
+                    type: FilterType.SELECT,
+                    id: "language",
+                    title: "Translated Language",
+                    options: LANGUAGE_OPTIONS.map(([title, id]) => ({ id, title })),
                 },
                 {
                     type: FilterType.EXCLUDABLE_MULTISELECT,

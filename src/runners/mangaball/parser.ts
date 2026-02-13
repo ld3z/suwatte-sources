@@ -5,7 +5,7 @@ import {
     ChapterData,
     PublicationStatus,
 } from "@suwatte/daisuke";
-import { BASE_URL } from "./constants";
+import { BASE_URL, LANG_TO_SUWATTE } from "./constants";
 import {
     MangaBallClient,
     parseDoc,
@@ -30,6 +30,7 @@ export async function searchManga(
         sort?: string;
         demographic?: string;
         status?: string;
+        language?: string;
         tagIncluded?: string[];
         tagExcluded?: string[];
         tagIncludeMode?: string;
@@ -48,8 +49,13 @@ export async function searchManga(
         "filters[person]": "any",
         "filters[publicationYear]": "",
         "filters[publicationStatus]": filters.status || "any",
-        "filters[translatedLanguage][]": "en",
     };
+
+    // Language filter: "any" means no filter, otherwise filter to specific language
+    const lang = filters.language || "any";
+    if (lang !== "any") {
+        body["filters[translatedLanguage][]"] = lang;
+    }
 
     // Included tags
     if (filters.tagIncluded && filters.tagIncluded.length > 0) {
@@ -216,44 +222,45 @@ export async function getChapters(
     const chapters: Chapter[] = [];
 
     data.ALL_CHAPTERS.forEach((container) => {
-        container.translations
-            .filter((t) => t.language === "en")
-            .forEach((translation) => {
-                const numberStr = container.number_float.toString().replace(/\.0$/, "");
+        container.translations.forEach((translation) => {
+            const numberStr = container.number_float.toString().replace(/\.0$/, "");
 
-                let title = "";
-                if (translation.volume > 0) {
-                    title += `Vol. ${translation.volume} `;
-                }
-                if (translation.name.includes(numberStr)) {
-                    title += translation.name.trim();
-                } else {
-                    title += `Ch. ${numberStr} ${translation.name.trim()}`;
-                }
+            let title = "";
+            if (translation.volume > 0) {
+                title += `Vol. ${translation.volume} `;
+            }
+            if (translation.name.includes(numberStr)) {
+                title += translation.name.trim();
+            } else {
+                title += `Ch. ${numberStr} ${translation.name.trim()}`;
+            }
 
-                // Build scanlator name
-                let providers: { id: string; name: string }[] = [];
-                const groupName = translation.group.name;
-                if (isGeneratedGroupId(translation.group._id)) {
-                    providers.push({ id: translation.group._id, name: groupName });
-                } else {
-                    providers.push({
-                        id: translation.group._id,
-                        name: `${groupName} (${translation.group._id})`,
-                    });
-                }
-
-                chapters.push({
-                    chapterId: translation.id,
-                    title: title.trim(),
-                    number: container.number_float,
-                    date: parseDate(translation.date),
-                    language: "en",
-                    index: chapters.length,
-                    providers,
-                    webUrl: `${BASE_URL}/chapter-detail/${translation.id}/`,
+            // Build scanlator name
+            let providers: { id: string; name: string }[] = [];
+            const groupName = translation.group.name;
+            if (isGeneratedGroupId(translation.group._id)) {
+                providers.push({ id: translation.group._id, name: groupName });
+            } else {
+                providers.push({
+                    id: translation.group._id,
+                    name: `${groupName} (${translation.group._id})`,
                 });
+            }
+
+            // Map mangaball language code to Suwatte language code
+            const suwatteLang = LANG_TO_SUWATTE[translation.language] || translation.language;
+
+            chapters.push({
+                chapterId: translation.id,
+                title: title.trim(),
+                number: container.number_float,
+                date: parseDate(translation.date),
+                language: suwatteLang,
+                index: chapters.length,
+                providers,
+                webUrl: `${BASE_URL}/chapter-detail/${translation.id}/`,
             });
+        });
     });
 
     return chapters;

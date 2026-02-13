@@ -11,7 +11,8 @@ export interface HomePage {
 }
 
 export interface Section {
-    type:         string;
+    type?:        string;
+    layout?:      string;
     key:          string;
     items?:       Item[];
     content?:     Content;

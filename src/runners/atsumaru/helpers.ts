@@ -65,25 +65,14 @@ export function proxifyImage(absoluteUrl: string): string {
   if (!absoluteUrl?.trim()) return "";
 
   let url = absoluteUrl.trim();
-  const lowerUrl = url.toLowerCase();
 
   // Fix malformed concatenations: atsu.moeposters → atsu.moe/static/posters
   url = url.replace(/^(https?:\/\/atsu\.moe)posters\//i, "$1/static/posters/");
-  url = url.replace(
-    /^(https?:\/\/atsu\.moe)posters(?!\/)/i,
-    "$1/static/posters"
-  );
 
-  // Ensure host has trailing slash
+  // Ensure host has trailing slash before path
   url = url.replace(/^(https?:\/\/atsu\.moe)(?!\/)/i, "$1/");
 
-  // Convert /posters/ → /static/posters/ (single regex)
-  url = url.replace(
-    /(https?:\/\/[^\/]*atsu\.moe)\/posters\//i,
-    "$1/static/posters/"
-  );
-
-  // Handle site-relative paths
+  // Handle site-relative paths (no host)
   if (/^\/?posters\//i.test(url)) {
     url =
       "https://atsu.moe/static/posters/" + url.replace(/^\/?posters\//i, "");
@@ -91,9 +80,14 @@ export function proxifyImage(absoluteUrl: string): string {
     url = "https://atsu.moe" + url;
   }
 
-  // Collapse all repeated /static and /posters segments in one pass
-  url = url.replace(/\/(static|posters)\/+/gi, "/$1/");
-  url = url.replace(/(\/static)+(\/posters)?/gi, "/static/posters");
+  // Convert /posters/ → /static/posters/ when not already under /static/
+  url = url.replace(
+    /(https?:\/\/[^\/]*atsu\.moe)\/posters\//i,
+    "$1/static/posters/"
+  );
+
+  // Collapse duplicate /static/posters/ segments
+  url = url.replace(/(\/static\/posters\/)+/gi, "/static/posters/");
 
   return url;
 }

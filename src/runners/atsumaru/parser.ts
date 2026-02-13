@@ -659,7 +659,8 @@ export async function extractHomeSectionsFromPrefetch(
   }
 
   for (const s of secs) {
-    if (!s || (s.type !== "carousel" && s.type !== "slideshow")) continue;
+    const layout = s.layout || s.type;
+    if (!layout || (layout !== "carousel" && layout !== "slideshow")) continue;
 
     const items: Highlight[] = [];
     for (const it of s.items ?? []) {
@@ -748,13 +749,13 @@ export async function extractHomeSectionsFromPrefetch(
     if (!items.length) continue;
 
     const title: string =
-      s.title || (s.type === "slideshow" ? "Featured" : "Browse");
+      s.title || (layout === "slideshow" ? "Featured" : "Browse");
     const section: PageSection = {
       id: (s.key as string) || title.toLowerCase().replace(/\s+/g, "_"),
       title,
       items,
       style:
-        s.type === "slideshow"
+        layout === "slideshow"
           ? SectionStyle.GALLERY
           : SectionStyle.STANDARD_GRID,
     } as any;

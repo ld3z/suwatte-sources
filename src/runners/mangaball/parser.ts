@@ -37,9 +37,9 @@ async function smartSearch(
     const isAdultFlags = new Map<string, boolean>();
     const highlights: Highlight[] = (data.data.manga || []).map((item) => {
         const slug = extractSlug(item.url);
-        // Extract primary title (before first parenthesis with alt names)
-        const titleMatch = item.title.match(/^([^(]+)/);
-        const title = titleMatch ? titleMatch[1].trim() : item.title;
+        // Keep parenthetical info like "(Fan Colored)" but strip alt-name lists
+        // that contain commas or slashes, e.g. "(ワンピース, 海贼王)" or "(ワンピース/BAH/One piece)"
+        const title = item.title.replace(/\s*\([^)]*[,/][^)]*\)/g, "").trim() || item.title;
         return {
             id: slug,
             title,

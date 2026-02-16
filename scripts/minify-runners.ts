@@ -10,9 +10,7 @@ const files = readdirSync(dir).filter((f) => f.endsWith(".stt"));
     const fp = join(dir, file);
     const code = readFileSync(fp, "utf8");
     const result = await minify(code, {
-      mangle: {
-        reserved: ["STTPackage"],
-      },
+      mangle: false,
       compress: true,
     });
     if (!result.code) continue;

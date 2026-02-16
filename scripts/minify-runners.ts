@@ -11,7 +11,7 @@ const files = readdirSync(dir).filter((f) => f.endsWith(".stt"));
     const code = readFileSync(fp, "utf8");
     const result = await minify(code, {
       mangle: false,
-      compress: true,
+      compress: false,
     });
     if (!result.code) continue;
     const saved = ((1 - result.code.length / code.length) * 100).toFixed(1);

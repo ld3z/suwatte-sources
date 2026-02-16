@@ -16,14 +16,44 @@ import {
 } from "./helpers";
 import {
     SearchResponse,
+    SmartSearchResponse,
     ChapterListResponse,
     Yoast,
 } from "./types";
 
 /**
- * Search / browse manga via the advanced search API
+ * Search manga using the smart-search API (text query)
  */
-export async function searchManga(
+async function smartSearch(
+    query: string,
+    client: MangaBallClient,
+): Promise<{ highlights: Highlight[]; hasNextPage: boolean; isAdultFlags: Map<string, boolean> }> {
+    const url = `${BASE_URL}/api/v1/smart-search/search/`;
+    const response = await client.postForm(url, { search_input: query.trim() });
+
+    const data: SmartSearchResponse =
+        typeof response === "string" ? JSON.parse(response) : response;
+
+    const isAdultFlags = new Map<string, boolean>();
+    const highlights: Highlight[] = (data.data.manga || []).map((item) => {
+        const slug = extractSlug(item.url);
+        // Extract primary title (before first parenthesis with alt names)
+        const titleMatch = item.title.match(/^([^(]+)/);
+        const title = titleMatch ? titleMatch[1].trim() : item.title;
+        return {
+            id: slug,
+            title,
+            cover: item.img,
+        };
+    });
+
+    return { highlights, hasNextPage: false, isAdultFlags };
+}
+
+/**
+ * Browse / filter manga via the advanced search API
+ */
+async function advancedSearch(
     query: string,
     page: number,
     filters: {
@@ -87,6 +117,36 @@ export async function searchManga(
     const hasNextPage = data.pagination.current_page < data.pagination.last_page;
 
     return { highlights, hasNextPage, isAdultFlags };
+}
+
+/**
+ * Search / browse manga — uses smart-search for text queries, advanced search for browsing/filters
+ */
+export async function searchManga(
+    query: string,
+    page: number,
+    filters: {
+        sort?: string;
+        demographic?: string;
+        status?: string;
+        language?: string;
+        tagIncluded?: string[];
+        tagExcluded?: string[];
+        tagIncludeMode?: string;
+        tagExcludeMode?: string;
+    },
+    client: MangaBallClient,
+): Promise<{ highlights: Highlight[]; hasNextPage: boolean; isAdultFlags: Map<string, boolean> }> {
+    const hasFilters = filters.demographic || filters.status || filters.language ||
+        (filters.tagIncluded && filters.tagIncluded.length > 0) ||
+        (filters.tagExcluded && filters.tagExcluded.length > 0);
+
+    // Use smart-search for text queries without filters (page 1 only, no pagination)
+    if (query.trim() && !hasFilters && page === 1) {
+        return smartSearch(query, client);
+    }
+
+    return advancedSearch(query, page, filters, client);
 }
 
 /**

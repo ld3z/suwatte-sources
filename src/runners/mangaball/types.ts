@@ -41,6 +41,26 @@ export interface TranslationGroup {
     name: string;
 }
 
+export interface SmartSearchResponse {
+    code: number;
+    message: string;
+    data: {
+        manga: SmartSearchManga[];
+        authors: string;
+        tags: string;
+    };
+}
+
+export interface SmartSearchManga {
+    url: string;      // e.g. "/title-detail/some-slug-12345"
+    title: string;
+    img: string;      // full image URL
+    rating: number;
+    views: number;
+    followers: number;
+    status: string;   // HTML string
+}
+
 export interface Yoast {
     "@graph": YoastGraph[];
 }

@@ -4,7 +4,7 @@
   "description": "suwatte-sources",
   "main": "dist/index.js",
   "scripts": {
-    "build": "daisuke build && node plugins/minify-runners.mjs",
+    "build": "daisuke build && tsx scripts/minify-runners.ts",
     "serve": "daisuke serve",
     "dev": "nodemon",
     "prep": "rimraf dist && tsc",
@@ -30,6 +30,7 @@
     "rimraf": "^6.1.2",
     "terser": "^5.46.0",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "stt": {

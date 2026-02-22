@@ -420,7 +420,8 @@ function formatChaptersForComix(
   if (deduplicated) {
     chapters.sort((a, b) => b.number - a.number);
   } else {
-    // Sort chapters by number desc, then by official status desc, then by updated_at desc
+    // Sort chapters by number desc, then by official status desc, then by updated_at asc
+    // Oldest uploads first for same chapter number prevents false update notifications
     chapters.sort((a, b) => {
       if (a.number !== b.number) {
         return b.number - a.number;
@@ -428,7 +429,7 @@ function formatChaptersForComix(
       if (a.is_official !== b.is_official) {
         return b.is_official - a.is_official;
       }
-      return b.updated_at - a.updated_at;
+      return a.updated_at - b.updated_at;
     });
   }
 

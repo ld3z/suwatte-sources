@@ -316,11 +316,23 @@ export async function getChapters(
                 number: container.number_float,
                 date: parseDate(translation.date),
                 language: suwatteLang,
-                index: chapters.length,
+                index: 0,
                 providers,
                 webUrl: `${BASE_URL}/chapter-detail/${translation.id}/`,
             });
         });
+    });
+
+    // Sort by number desc, then date asc for same number
+    // Oldest uploads first prevents false update notifications
+    chapters.sort((a, b) => {
+        if (a.number !== b.number) return b.number - a.number;
+        return a.date.getTime() - b.date.getTime();
+    });
+
+    // Update indices after sorting
+    chapters.forEach((ch, i) => {
+        ch.index = i;
     });
 
     return chapters;

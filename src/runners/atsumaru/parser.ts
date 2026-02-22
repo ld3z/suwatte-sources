@@ -468,13 +468,22 @@ export async function fetchAllChapters(
     const copy = [...collected];
 
     if (hasIndex) {
-      copy.sort(
-        (a: any, b: any) => Number(b.index ?? 0) - Number(a.index ?? 0)
-      );
+      copy.sort((a: any, b: any) => {
+        const idxDiff = Number(b.index ?? 0) - Number(a.index ?? 0);
+        if (idxDiff !== 0) return idxDiff;
+        // Same index/number: oldest first to prevent false update notifications
+        const dateA = Number(a.createdAt ?? a.publishedAt ?? a.timestamp ?? 0);
+        const dateB = Number(b.createdAt ?? b.publishedAt ?? b.timestamp ?? 0);
+        return dateA - dateB;
+      });
     } else if (hasNumber) {
-      copy.sort(
-        (a: any, b: any) => Number(b.number ?? 0) - Number(a.number ?? 0)
-      );
+      copy.sort((a: any, b: any) => {
+        const numDiff = Number(b.number ?? 0) - Number(a.number ?? 0);
+        if (numDiff !== 0) return numDiff;
+        const dateA = Number(a.createdAt ?? a.publishedAt ?? a.timestamp ?? 0);
+        const dateB = Number(b.createdAt ?? b.publishedAt ?? b.timestamp ?? 0);
+        return dateA - dateB;
+      });
     } else {
       copy.reverse();
     }

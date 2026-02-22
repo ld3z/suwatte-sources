@@ -177,7 +177,9 @@ export class Target
         if (a.volume === undefined && b.volume !== undefined) return -1;
         if (a.volume !== undefined && b.volume === undefined) return 1;
         if (a.volume !== b.volume) return (b.volume || 0) - (a.volume || 0);
-        return b.number - a.number;
+        if (a.number !== b.number) return b.number - a.number;
+        // Same number: oldest first so new uploads don't trigger false update notifications
+        return a.date.getTime() - b.date.getTime();
       });
 
       // Update indices after sorting

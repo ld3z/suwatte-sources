@@ -13,7 +13,9 @@ import {
   PageLinkResolver,
   PageSection,
   ResolvedPageSection,
+  RunnerPreferenceProvider,
   SectionStyle,
+  UIMultiPicker,
 } from "@suwatte/daisuke";
 import {
   BASE_URL,
@@ -23,6 +25,7 @@ import {
   INFO,
   PUBLICATION_STATUS,
   REQUIRED_HEADERS,
+  LANGUAGE_OPTIONS,
   SITE_URL,
 } from "./constants";
 import {
@@ -44,10 +47,61 @@ import {
 } from "./parser";
 
 export class Target
-  implements ContentSource, ImageRequestHandler, PageLinkResolver
+  implements
+    ContentSource,
+    ImageRequestHandler,
+    PageLinkResolver,
+    RunnerPreferenceProvider
 {
   info = INFO;
   private client: SimpleNetworkClient = new NetworkClient();
+  private preferredLanguages: string[] = [];
+
+  constructor() {
+    this.initializePreferences();
+  }
+
+  private async initializePreferences(): Promise<void> {
+    try {
+      this.preferredLanguages =
+        (await ObjectStore.stringArray(
+          "weebdex_preferred_languages"
+        )) ?? [];
+    } catch {
+      this.preferredLanguages = [];
+    }
+  }
+
+  async getPreferenceMenu(): Promise<{ sections: any[] }> {
+    return {
+      sections: [
+        {
+          header: "Languages",
+          footer:
+            "Select preferred languages for chapters. Leave empty to show all languages.",
+          children: [
+            UIMultiPicker({
+              id: "preferred_languages",
+              title: "Preferred Languages",
+              options: LANGUAGE_OPTIONS.map(([title, id]) => ({ id, title })),
+              value: this.preferredLanguages,
+              didChange: async (value: string[]) => {
+                this.preferredLanguages = value;
+                try {
+                  await ObjectStore.set(
+                    "weebdex_preferred_languages",
+                    value
+                  );
+                } catch (error) {
+                  console.error("Failed to save preference:", error);
+                }
+              },
+            }),
+          ],
+        },
+      ],
+    };
+  }
 
   // --- PageLinkResolver ---
   async resolvePageSection(
@@ -134,10 +188,16 @@ export class Target
   async getChapters(contentId: string): Promise<Chapter[]> {
     try {
       const { id } = parseMangaId(contentId);
-      const chapters = await getAllChapters(id, this.client);
+      let chapters = await getAllChapters(id, this.client, this.preferredLanguages.length > 0 ? this.preferredLanguages : undefined);
 
       if (!chapters || chapters.length === 0) {
         return [];
+      }
+
+      // Client-side language filter as safety net (API fallback may drop tlang)
+      if (this.preferredLanguages.length > 0) {
+        const allowedLangs = new Set(this.preferredLanguages);
+        chapters = chapters.filter((ch) => allowedLangs.has(ch.language));
       }
 
       // Convert to Suwatte chapters with single pass through chapters

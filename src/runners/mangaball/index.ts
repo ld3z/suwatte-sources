@@ -16,6 +16,7 @@ import {
     ResolvedPageSection,
     SectionStyle,
     RunnerPreferenceProvider,
+    UIMultiPicker,
     UIToggle,
 } from "@suwatte/daisuke";
 import {
@@ -30,6 +31,7 @@ import {
     DEMOGRAPHIC_OPTIONS,
     STATUS_OPTIONS,
     LANGUAGE_OPTIONS,
+    LANG_TO_SUWATTE,
 } from "./constants";
 import { MangaBallClient } from "./helpers";
 import {
@@ -51,6 +53,7 @@ export class Target
     info = INFO;
     private client = new MangaBallClient();
     private hideNSFW: boolean = false;
+    private preferredLanguages: string[] = [];
 
     constructor() {
         this.initializePreferences();
@@ -61,6 +64,10 @@ export class Target
             const stored = await ObjectStore.boolean("mangaball_hide_nsfw");
             if (stored !== null) {
                 this.hideNSFW = stored;
+            }
+            const storedLangs = await ObjectStore.stringArray("mangaball_preferred_languages");
+            if (storedLangs !== null) {
+                this.preferredLanguages = storedLangs;
             }
         } catch (error) {
             console.error("Failed to load preference:", error);
@@ -173,7 +180,14 @@ export class Target
 
     async getChapters(contentId: string): Promise<Chapter[]> {
         try {
-            return await getChapters(contentId, this.client);
+            let chapters = await getChapters(contentId, this.client);
+            if (this.preferredLanguages.length > 0) {
+                const allowedLangs = new Set(
+                    this.preferredLanguages.map((code) => LANG_TO_SUWATTE[code] || code)
+                );
+                chapters = chapters.filter((ch) => allowedLangs.has(ch.language));
+            }
+            return chapters;
         } catch (error) {
             console.error(`Failed to get chapters for ${contentId}:`, error);
             return [];
@@ -377,6 +391,27 @@ export class Target
                                 this.hideNSFW = value;
                                 try {
                                     await ObjectStore.set("mangaball_hide_nsfw", value);
+                                } catch (error) {
+                                    console.error("Failed to save preference:", error);
+                                }
+                            },
+                        }),
+                    ],
+                },
+                {
+                    header: "Preferred Languages",
+                    children: [
+                        UIMultiPicker({
+                            id: "preferred_languages",
+                            title: "Preferred Languages",
+                            options: LANGUAGE_OPTIONS
+                                .filter(([, id]) => id !== "any")
+                                .map(([title, id]) => ({ id, title })),
+                            value: this.preferredLanguages,
+                            didChange: async (value: string[]) => {
+                                this.preferredLanguages = value;
+                                try {
+                                    await ObjectStore.set("mangaball_preferred_languages", value);
                                 } catch (error) {
                                     console.error("Failed to save preference:", error);
                                 }

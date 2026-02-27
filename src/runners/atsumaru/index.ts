@@ -118,11 +118,16 @@ export class Target
     }
 
     return {
-      pages: chapterData.pages.map((page: any) => ({
-        url: `https://atsu.moe${page.image}`,
-        width: page.width,
-        height: page.height,
-      })),
+      pages: chapterData.pages.map((page: any) => {
+        const imageUrl = /^https?:\/\//i.test(page.image)
+          ? page.image
+          : `https://atsu.moe${page.image}`;
+        return {
+          url: imageUrl,
+          width: page.width,
+          height: page.height,
+        };
+      }),
     } as ChapterData;
   }
 

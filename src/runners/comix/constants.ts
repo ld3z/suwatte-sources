@@ -3,7 +3,7 @@ import { CatalogRating, RunnerInfo } from "@suwatte/daisuke";
 export const INFO: RunnerInfo = {
   id: "to.comix",
   name: "Comix",
-  version: 0.8,
+  version: 0.9,
   website: "https://comix.to",
   supportedLanguages: ["EN_US"],
   thumbnail: "comix_logo.png",

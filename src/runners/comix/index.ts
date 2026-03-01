@@ -16,6 +16,7 @@ import {
   ResolvedPageSection,
   SectionStyle,
   RunnerPreferenceProvider,
+  SourceConfig,
   UIMultiPicker,
   UIToggle,
 } from "@suwatte/daisuke";
@@ -39,6 +40,9 @@ export class Target
   PageLinkResolver,
   RunnerPreferenceProvider {
   info = INFO;
+  config: SourceConfig = {
+    cloudflareResolutionURL: BASE_URL,
+  };
   private client: SimpleNetworkClient = new NetworkClient();
   private hideNSFW: boolean = false;
   private dedupChapters: boolean = false;
@@ -108,6 +112,16 @@ export class Target
         getLatestManga(this.client, 1),
       ]);
 
+      // Re-throw CloudflareError from settled results so the webview bypass triggers
+      for (const settled of [popularSettled, latestSettled]) {
+        if (
+          settled.status === "rejected" &&
+          (settled.reason as any)?.name === "CloudflareError"
+        ) {
+          throw settled.reason;
+        }
+      }
+
       const sections: PageSection[] = [];
 
       // Popular section (30 days)
@@ -158,14 +172,15 @@ export class Target
           items: [
             {
               id: "info",
-              title: "Comix - Manga Reader",
+              title: "Comix",
               subtitle: "Search for manga using the search bar",
               cover: "/assets/comix_logo.png",
             },
           ],
         },
       ];
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       if (error instanceof Error) {
         console.error(
           "getSectionsForPage: Failed to load home sections:",
@@ -192,7 +207,7 @@ export class Target
           items: [
             {
               id: "info",
-              title: "Comix - Manga Reader",
+              title: "Comix",
               subtitle: "Search for manga using the search bar",
               cover: "/assets/comix_logo.png",
             },
@@ -208,7 +223,8 @@ export class Target
       const { hashId } = parseMangaId(contentId);
       const content = await getMangaById(hashId, this.client);
       return content;
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       if (error instanceof Error) {
         console.error(`Failed to get content ${contentId}:`, error.message);
         console.error(error.stack);
@@ -239,7 +255,8 @@ export class Target
         this.dedupChapters,
       );
       return chapters;
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       if (error instanceof Error) {
         console.error(
           `Failed to get chapters for ${contentId}:`,
@@ -269,7 +286,8 @@ export class Target
   ): Promise<ChapterData> {
     try {
       return await getChapterData(chapterId, this.client);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       if (error instanceof Error) {
         console.error(
           `Failed to get chapter data for ${chapterId}:`,
@@ -335,7 +353,8 @@ export class Target
         }
 
         throw new Error("No data");
-      } catch (error) {
+      } catch (error: any) {
+        if (error?.name === "CloudflareError") throw error;
         if (error instanceof Error) {
           console.error("getDirectory: Failed to load browse:", error.message);
           console.error(error.stack);
@@ -400,7 +419,8 @@ export class Target
         results: highlights,
         isLastPage,
       };
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       if (error instanceof Error) {
         console.error("Search failed:", error.message);
         console.error(error.stack);

@@ -14,6 +14,7 @@ import {
   PageSection,
   ResolvedPageSection,
   SectionStyle,
+  SourceConfig,
   Property,
 } from "@suwatte/daisuke";
 import { INFO } from "./constants";
@@ -36,6 +37,9 @@ export class Target
   implements ContentSource, ImageRequestHandler, PageLinkResolver
 {
   info = INFO;
+  config: SourceConfig = {
+    cloudflareResolutionURL: "https://atsu.moe",
+  };
   private client: SimpleNetworkClient = new NetworkClient();
   private lastQuery: string | null = null;
   // Small in-memory cache to avoid requiring a second identical query
@@ -75,7 +79,8 @@ export class Target
     try {
       const apiResponse = await this.fetcher(apiUrl);
       return extractHomeSectionsFromPrefetch(apiResponse, base);
-    } catch {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       return [this.topSearchedSection()];
     }
   }
@@ -485,7 +490,8 @@ export class Target
           isLastPage,
         };
       }
-    } catch (_error) {
+    } catch (_error: any) {
+      if (_error?.name === "CloudflareError") throw _error;
       // Search failed, continue to fallback
     }
 

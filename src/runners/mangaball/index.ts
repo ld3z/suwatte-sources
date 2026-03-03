@@ -16,6 +16,7 @@ import {
     ResolvedPageSection,
     SectionStyle,
     RunnerPreferenceProvider,
+    SourceConfig,
     UIMultiPicker,
     UIToggle,
 } from "@suwatte/daisuke";
@@ -51,6 +52,9 @@ export class Target
     PageLinkResolver,
     RunnerPreferenceProvider {
     info = INFO;
+    config: SourceConfig = {
+        cloudflareResolutionURL: BASE_URL,
+    };
     private client = new MangaBallClient();
     private hideNSFW: boolean = false;
     private preferredLanguages: string[] = [];
@@ -138,7 +142,8 @@ export class Target
                     ],
                 },
             ];
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === "CloudflareError") throw error;
             console.error("getSectionsForPage failed:", error);
             return [
                 {
@@ -170,7 +175,8 @@ export class Target
                 throw new Error("Could not resolve URL");
             }
             return await getMangaDetails(contentId, this.client);
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === "CloudflareError") throw error;
             console.error(`Failed to get content ${contentId}:`, error);
             throw new Error(
                 `Failed to load manga: ${error instanceof Error ? error.message : String(error)}`,
@@ -278,7 +284,8 @@ export class Target
                 results: highlights,
                 isLastPage: !result.hasNextPage,
             };
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === "CloudflareError") throw error;
             console.error("getDirectory failed:", error);
             return {
                 results: [],

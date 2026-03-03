@@ -15,6 +15,7 @@ import {
   ResolvedPageSection,
   RunnerPreferenceProvider,
   SectionStyle,
+  SourceConfig,
   UIMultiPicker,
 } from "@suwatte/daisuke";
 import {
@@ -54,6 +55,9 @@ export class Target
     RunnerPreferenceProvider
 {
   info = INFO;
+  config: SourceConfig = {
+    cloudflareResolutionURL: SITE_URL,
+  };
   private client: SimpleNetworkClient = new NetworkClient();
   private preferredLanguages: string[] = [];
 
@@ -153,7 +157,8 @@ export class Target
       }
 
       throw new Error("No data available");
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       console.error("Failed to load home sections:", error);
       return [
         {
@@ -179,7 +184,8 @@ export class Target
       const { id } = parseMangaId(contentId);
       const manga = await getMangaById(id, this.client);
       return mangaToContent(manga);
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       console.error(`Failed to get content ${contentId}:`, error);
       throw new Error(`Failed to load manga: ${error}`);
     }
@@ -352,7 +358,8 @@ export class Target
         results: highlights,
         isLastPage,
       };
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === "CloudflareError") throw error;
       console.error("Search failed:", error);
       return {
         results: [

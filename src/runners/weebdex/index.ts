@@ -60,12 +60,11 @@ export class Target
   };
   private client: SimpleNetworkClient = new NetworkClient();
   private preferredLanguages: string[] = [];
+  private _prefsLoaded: boolean = false;
 
-  constructor() {
-    this.initializePreferences();
-  }
-
-  private async initializePreferences(): Promise<void> {
+  private async ensurePrefs(): Promise<void> {
+    if (this._prefsLoaded) return;
+    this._prefsLoaded = true;
     try {
       this.preferredLanguages =
         (await ObjectStore.stringArray(
@@ -77,6 +76,7 @@ export class Target
   }
 
   async getPreferenceMenu(): Promise<{ sections: any[] }> {
+    await this.ensurePrefs();
     return {
       sections: [
         {
@@ -192,6 +192,7 @@ export class Target
   }
 
   async getChapters(contentId: string): Promise<Chapter[]> {
+    await this.ensurePrefs();
     try {
       const { id } = parseMangaId(contentId);
       let chapters = await getAllChapters(id, this.client, this.preferredLanguages.length > 0 ? this.preferredLanguages : undefined);

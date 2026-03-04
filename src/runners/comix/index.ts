@@ -48,27 +48,24 @@ export class Target
   private dedupChapters: boolean = false;
   private allowedTypes: Set<string> = new Set(["manga", "manhwa", "manhua", "other"]);
   private hiddenGenres: Set<string> = new Set();
+  private _prefsLoaded: boolean = false;
 
-  constructor() {
-    this.initializePreferences();
-  }
-
-  private async initializePreferences(): Promise<void> {
+  private async ensurePrefs(): Promise<void> {
+    if (this._prefsLoaded) return;
+    this._prefsLoaded = true;
     try {
-      const stored = await ObjectStore.boolean("comix_hide_nsfw");
-      if (stored !== null) {
+      const stored = await ObjectStore.get("comix_hide_nsfw");
+      if (typeof stored === "boolean") {
         this.hideNSFW = stored;
       }
-      const dedupStored = await ObjectStore.boolean("comix_dedup_chapters");
-      if (dedupStored !== null) {
+      const dedupStored = await ObjectStore.get("comix_dedup_chapters");
+      if (typeof dedupStored === "boolean") {
         this.dedupChapters = dedupStored;
       }
-      // Load allowed types
       const typesStored = await ObjectStore.stringArray("comix_allowed_types");
       if (typesStored !== null && typesStored.length > 0) {
         this.allowedTypes = new Set(typesStored);
       }
-      // Load hidden genres
       const genresStored = await ObjectStore.stringArray("comix_hidden_genres");
       if (genresStored !== null) {
         this.hiddenGenres = new Set(genresStored);
@@ -105,6 +102,7 @@ export class Target
   }
 
   async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
+    await this.ensurePrefs();
     try {
       // Fetch popular and latest updates in parallel for the homepage
       const [popularSettled, latestSettled] = await Promise.allSettled([
@@ -247,6 +245,7 @@ export class Target
   }
 
   async getChapters(contentId: string): Promise<Chapter[]> {
+    await this.ensurePrefs();
     try {
       const { hashId } = parseMangaId(contentId);
       const chapters = await getAllChapters(
@@ -602,6 +601,7 @@ export class Target
 
   // --- RunnerPreferenceProvider ---
   async getPreferenceMenu(): Promise<{ sections: any[] }> {
+    await this.ensurePrefs();
     // Genre options for hidden genres picker
     const genreOptions = [
       { id: "6", title: "Action" },

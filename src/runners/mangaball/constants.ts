@@ -3,7 +3,7 @@ import { CatalogRating, RunnerInfo } from "@suwatte/daisuke";
 export const INFO: RunnerInfo = {
     id: "ld3z.mangaball",
     name: "Mangaball",
-    version: 0.4,
+    version: 0.5,
     website: "https://mangaball.net",
     supportedLanguages: ["MULTI"],
     thumbnail: "mangaball_logo.png",

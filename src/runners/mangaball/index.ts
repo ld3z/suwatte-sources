@@ -58,15 +58,14 @@ export class Target
     private client = new MangaBallClient();
     private hideNSFW: boolean = false;
     private preferredLanguages: string[] = [];
+    private _prefsLoaded: boolean = false;
 
-    constructor() {
-        this.initializePreferences();
-    }
-
-    private async initializePreferences(): Promise<void> {
+    private async ensurePrefs(): Promise<void> {
+        if (this._prefsLoaded) return;
+        this._prefsLoaded = true;
         try {
-            const stored = await ObjectStore.boolean("mangaball_hide_nsfw");
-            if (stored !== null) {
+            const stored = await ObjectStore.get("mangaball_hide_nsfw");
+            if (typeof stored === "boolean") {
                 this.hideNSFW = stored;
             }
             const storedLangs = await ObjectStore.stringArray("mangaball_preferred_languages");
@@ -87,6 +86,7 @@ export class Target
     }
 
     async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
+        await this.ensurePrefs();
         try {
             const [popularSettled, latestSettled] = await Promise.allSettled([
                 getPopularManga(1, this.client),
@@ -185,6 +185,7 @@ export class Target
     }
 
     async getChapters(contentId: string): Promise<Chapter[]> {
+        await this.ensurePrefs();
         try {
             let chapters = await getChapters(contentId, this.client);
             if (this.preferredLanguages.length > 0) {
@@ -215,6 +216,7 @@ export class Target
     }
 
     async getDirectory(request: DirectoryRequest): Promise<PagedResult> {
+        await this.ensurePrefs();
         const query = request.query?.trim() || "";
         const page = request.page || 1;
 
@@ -385,6 +387,7 @@ export class Target
 
     // --- RunnerPreferenceProvider ---
     async getPreferenceMenu(): Promise<{ sections: any[] }> {
+        await this.ensurePrefs();
         return {
             sections: [
                 {

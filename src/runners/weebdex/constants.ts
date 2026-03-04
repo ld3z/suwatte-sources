@@ -3,7 +3,7 @@ import { CatalogRating, RunnerInfo } from "@suwatte/daisuke";
 export const INFO: RunnerInfo = {
   id: "org.weebdex",
   name: "WeebDex",
-  version: 0.3,
+  version: 0.4,
   website: "https://weebdex.org",
   supportedLanguages: ["MULTI"],
   thumbnail: "weebdex_logo.png",

@@ -45,8 +45,10 @@ export class Target
 
     async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
         try {
-            const highlights = await getPopularManga(this.client);
-            const latest = await getLatestUpdates(this.client);
+            const [highlights, latest] = await Promise.all([
+                getPopularManga(this.client),
+                getLatestUpdates(this.client),
+            ]);
             return [
                 {
                     id: "popular",

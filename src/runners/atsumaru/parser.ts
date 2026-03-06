@@ -87,9 +87,13 @@ export async function getSeriesById(
   client?: SimpleNetworkClient
 ): Promise<Content | null> {
   try {
-    // Try the detailed page API first
-    const apiUrl = `https://atsu.moe/api/manga/page?id=${rawId}`;
-    const detailResponse = await fetchText(apiUrl, client);
+    // Fetch both detail and info endpoints in parallel
+    const detailUrl = `https://atsu.moe/api/manga/page?id=${rawId}`;
+    const infoUrl = `https://atsu.moe/api/manga/info?mangaId=${rawId}`;
+    const [detailResponse, infoResp] = await Promise.all([
+      fetchText(detailUrl, client),
+      fetchText(infoUrl, client).catch(() => null),
+    ]);
 
     if (!detailResponse) {
       throw new Error("Empty response from detailed API");
@@ -98,13 +102,9 @@ export async function getSeriesById(
     const detailedData: any = JSON.parse(detailResponse);
     const mangaData = (detailedData as any)?.mangaPage || detailedData;
 
-    // Attempt to enrich/merge chapters from both detailed and info endpoints.
-    // The detailed API is preferred for richer metadata, but the lightweight
-    // info endpoint currently contains the correct chapter list for some series.
-    try {
-      const infoUrl = `https://atsu.moe/api/manga/info?mangaId=${rawId}`;
-      const infoResp = await fetchText(infoUrl, client);
-      if (infoResp) {
+    // Enrich/merge chapters from info endpoint if available.
+    if (infoResp) {
+      try {
         const infoData = JSON.parse(infoResp);
         if (
           infoData?.chapters &&
@@ -114,15 +114,14 @@ export async function getSeriesById(
           const detailedChapters = Array.isArray(mangaData?.chapters)
             ? mangaData.chapters
             : [];
-          // Merge lists, preferring detailed entries when duplicates exist.
           mangaData.chapters = mergeChapterLists(
             detailedChapters,
             infoData.chapters
           );
         }
+      } catch {
+        // ignore parse failures
       }
-    } catch {
-      // ignore failures and continue with whatever we have
     }
 
     if (mangaData?.title) {
@@ -642,18 +641,24 @@ export async function extractHomeSectionsFromPrefetch(
 
   const detailedDataMap = new Map<string, any>();
 
-  const fetchPromises = Array.from(allMangaIds).map(async (rawId) => {
-    try {
-      const apiUrl = `https://atsu.moe/api/manga/page?id=${rawId}`;
-      const detailResponse = await fetchText(apiUrl);
-      const detailedData = JSON.parse(detailResponse);
-      detailedDataMap.set(rawId, detailedData);
-    } catch (_error) {
-      // Silently ignore failed requests
-    }
-  });
-
-  await Promise.all(fetchPromises);
+  // Fetch details in batches of 6 to avoid overwhelming the server
+  const mangaIdArray = Array.from(allMangaIds);
+  const batchSize = 6;
+  for (let i = 0; i < mangaIdArray.length; i += batchSize) {
+    const batch = mangaIdArray.slice(i, i + batchSize);
+    await Promise.all(
+      batch.map(async (rawId) => {
+        try {
+          const apiUrl = `https://atsu.moe/api/manga/page?id=${rawId}`;
+          const detailResponse = await fetchText(apiUrl);
+          const detailedData = JSON.parse(detailResponse);
+          detailedDataMap.set(rawId, detailedData);
+        } catch (_error) {
+          // Silently ignore failed requests
+        }
+      })
+    );
+  }
 
   const imageMap = new Map<string, string>();
   for (const s of secs) {

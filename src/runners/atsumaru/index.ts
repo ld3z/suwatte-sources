@@ -1,4 +1,4 @@
-import {
+﻿import {
   Chapter,
   ChapterData,
   Content,
@@ -349,17 +349,6 @@ export class Target
       }
 
       if (searchResults && Array.isArray(searchResults.hits) && searchResults.hits.length > 0) {
-        // Normalize titles to make matching apostrophe/diacritic/spacing-insensitive
-        const normalizeTitle = (s: string): string =>
-          (s || "")
-            .normalize("NFKD")
-            .replace(/[\u0300-\u036f]/g, "") // strip diacritics
-            .toLowerCase()
-            .replace(/['’`´]/g, "") // strip apostrophes/backticks/acute
-            .replace(/[^a-z0-9]+/g, " ") // collapse punctuation to spaces
-            .trim();
-
-        const nq = normalizeTitle(q);
 
         // If there is an exact normalized title match, return ONLY those matches
         const exactHits = searchResults.hits.filter((h: any) => {

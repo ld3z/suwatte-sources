@@ -138,6 +138,7 @@ export async function getSeriesById(
       const result = {
         title: mangaData.englishTitle || mangaData.title,
         cover: _cover,
+        webUrl: `https://atsu.moe/manga/${rawId}`,
         summary:
           synopsis ||
           `No description available for "${
@@ -196,6 +197,7 @@ export async function getSeriesById(
               return {
                 title: item.title,
                 cover: _cover,
+                webUrl: `https://atsu.moe/manga/${rawId}`,
                 summary:
                   item.synopsis ||
                   item.description ||

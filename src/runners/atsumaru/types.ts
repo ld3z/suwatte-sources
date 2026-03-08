@@ -38,6 +38,7 @@ export interface Item {
     color?:               string;
     image?:               string;
     initiallyBookmarked?: boolean;
+    isAdult?:             boolean;
     type?:                Type;
     slug?:                string;
     chapter?:             ChapterInfo;
@@ -61,6 +62,7 @@ export interface MangaPage {
     englishTitle:          string;
     poster:                Poster;
     isInitiallyBookmarked: boolean;
+    isAdult?:              boolean;
     title:                 string;
     type:                  Type;
     otherNames:            any[];
@@ -145,6 +147,7 @@ export interface Hit {
 export interface Document {
     englishTitle?: string;
     id:            string;
+    isAdult?:      boolean;
     poster:        string;
     title:         string;
 }

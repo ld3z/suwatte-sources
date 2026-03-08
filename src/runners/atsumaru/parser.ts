@@ -149,10 +149,13 @@ export async function getSeriesById(
         }
       }
 
+      const isAdult = !!(mangaData.isAdult);
+
       const result = {
         title: mainTitle,
         cover: _cover,
         webUrl: `https://atsu.moe/manga/${rawId}`,
+        isNSFW: isAdult,
         additionalTitles,
         summary:
           synopsis ||
@@ -256,7 +259,8 @@ export async function searchManga(
   query: string,
   client?: SimpleNetworkClient,
   page: number = 1,
-  perPage: number = 12
+  perPage: number = 12,
+  hideNSFW: boolean = false
 ): Promise<SearchResponse | null> {
   try {
     const q = query.trim();
@@ -281,7 +285,7 @@ export async function searchManga(
       `&page=${p}` +
       `&query_by=title%2CenglishTitle%2CotherNames` +
       `&query_by_weights=3%2C2%2C1` +
-      `&include_fields=id%2Ctitle%2CenglishTitle%2Cposter` +
+      `&include_fields=id%2Ctitle%2CenglishTitle%2Cposter%2CisAdult` +
       `&prioritize_exact_match=true` +
       `&prefix=true`;
 
@@ -352,13 +356,16 @@ export async function searchManga(
       return t1 === nq || t2 === nq;
     });
 
-    if (combinedExactHits.length > 0) {
-      // Return a minimal SearchResponse-shaped object containing only the exact matches.
+    const filteredExactHits = hideNSFW
+      ? combinedExactHits.filter((h: any) => !h?.document?.isAdult)
+      : combinedExactHits;
+
+    if (filteredExactHits.length > 0) {
       return {
         facet_counts: [],
-        found: combinedExactHits.length,
-        hits: combinedExactHits,
-        out_of: combinedExactHits.length,
+        found: filteredExactHits.length,
+        hits: filteredExactHits,
+        out_of: filteredExactHits.length,
         page: 1,
         request_params: {
           collection_name: "manga",
@@ -371,21 +378,30 @@ export async function searchManga(
       } as any;
     }
 
-    const pCount = primary?.hits?.length ?? 0;
-    const fCount = fallback?.hits?.length ?? 0;
+    const filterHits = (res: any): any => {
+      if (!hideNSFW || !res?.hits) return res;
+      const filtered = res.hits.filter((h: any) => !h?.document?.isAdult);
+      return { ...res, hits: filtered, found: filtered.length };
+    };
 
-    const pGood = pCount ? hasGood(primary.hits) : false;
-    const fGood = fCount ? hasGood(fallback.hits) : false;
+    const pFiltered = filterHits(primary);
+    const fFiltered = filterHits(fallback);
+
+    const pCount = pFiltered?.hits?.length ?? 0;
+    const fCount = fFiltered?.hits?.length ?? 0;
+
+    const pGood = pCount ? hasGood(pFiltered.hits) : false;
+    const fGood = fCount ? hasGood(fFiltered.hits) : false;
 
     if (pCount && pGood) {
-      return primary;
+      return pFiltered;
     }
     if (fCount && fGood) {
-      return fallback;
+      return fFiltered;
     }
 
     if (pCount || fCount) {
-      return pCount >= fCount ? primary : fallback;
+      return pCount >= fCount ? pFiltered : fFiltered;
     }
 
     return null;
@@ -617,7 +633,8 @@ export async function getChapterData(
 
 export async function extractHomeSectionsFromPrefetch(
   html: string,
-  baseUrl: string
+  baseUrl: string,
+  hideNSFW: boolean = false
 ): Promise<PageSection[]> {
   const m = html.match(/window\.homePage\s*=\s*(\{[\s\S]*?\});/);
   let data: any;
@@ -698,6 +715,14 @@ export async function extractHomeSectionsFromPrefetch(
       const title: string = it.title || "Series";
 
       const detailedData = detailedDataMap.get(rawId);
+
+      if (hideNSFW) {
+        const adultFlag =
+          (detailedData as any)?.mangaPage?.isAdult ??
+          (detailedData as any)?.isAdult ??
+          (it as any).isAdult;
+        if (adultFlag) continue;
+      }
 
       let imgPath: string | undefined;
       if ((detailedData as any)?.mangaPage?.poster?.image) {

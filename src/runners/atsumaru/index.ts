@@ -1,4 +1,4 @@
-﻿import {
+import {
   Chapter,
   ChapterData,
   Content,
@@ -13,9 +13,11 @@
   PagedResult,
   PageSection,
   ResolvedPageSection,
+  RunnerPreferenceProvider,
   SectionStyle,
   SourceConfig,
   Property,
+  UIToggle,
 } from "@suwatte/daisuke";
 import { INFO } from "./constants";
 import {
@@ -34,7 +36,7 @@ import {
 } from "./helpers";
 
 export class Target
-  implements ContentSource, ImageRequestHandler, PageLinkResolver
+  implements ContentSource, ImageRequestHandler, PageLinkResolver, RunnerPreferenceProvider
 {
   info = INFO;
   config: SourceConfig = {
@@ -42,9 +44,24 @@ export class Target
   };
   private client: SimpleNetworkClient = new NetworkClient();
   private lastQuery: string | null = null;
-  // Small in-memory cache to avoid requiring a second identical query
   private lastQueryNormalized: string | null = null;
   private lastExactResults: Highlight[] | null = null;
+
+  private hideNSFW: boolean = false;
+  private _prefsLoaded: boolean = false;
+
+  private async ensurePrefs(): Promise<void> {
+    if (this._prefsLoaded) return;
+    this._prefsLoaded = true;
+    try {
+      const stored = await ObjectStore.get("atsumaru_hide_nsfw");
+      if (typeof stored === "boolean") {
+        this.hideNSFW = stored;
+      }
+    } catch (error) {
+      console.error("Failed to load preference:", error);
+    }
+  }
 
   private fetcher = (url: string) => fetchText(url, this.client);
 
@@ -73,12 +90,13 @@ export class Target
   }
 
   async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
+    await this.ensurePrefs();
     const base = "https://atsu.moe/";
     const apiUrl = "https://atsu.moe/api/home/page";
 
     try {
       const apiResponse = await this.fetcher(apiUrl);
-      return extractHomeSectionsFromPrefetch(apiResponse, base);
+      return extractHomeSectionsFromPrefetch(apiResponse, base, this.hideNSFW);
     } catch (error: any) {
       if (error?.name === "CloudflareError") throw error;
       return [this.topSearchedSection()];
@@ -140,6 +158,7 @@ export class Target
   // The filter interface won't appear since this method doesn't exist
 
   async getDirectory(query: DirectoryRequest): Promise<PagedResult> {
+    await this.ensurePrefs();
     const q = (query.query ?? "").trim();
     if (!q) {
       // Try to fetch homepage sections and return the popular/featured carousel items
@@ -147,7 +166,7 @@ export class Target
         const base = "https://atsu.moe/";
         const apiUrl = "https://atsu.moe/api/home/page";
         const apiResponse = await this.fetcher(apiUrl);
-        const sections = await extractHomeSectionsFromPrefetch(apiResponse, base);
+        const sections = await extractHomeSectionsFromPrefetch(apiResponse, base, this.hideNSFW);
         if (sections && sections.length > 0) {
           // Prefer sections that look like popular/featured carousels: gallery/slideshow or titles containing "popular"/"featured"
           let chosen: PageSection | undefined = sections.find((s: PageSection) =>
@@ -241,8 +260,8 @@ export class Target
         // Run the requested page and page=1 concurrently. If page=1 contains an exact normalized match
         // prefer and return that immediately (handles UIs that preserve page state).
         const [pageRes, topRes] = await Promise.all([
-          searchManga(q, this.client, page, perPage),
-          searchManga(q, this.client, 1, perPage),
+          searchManga(q, this.client, page, perPage, this.hideNSFW),
+          searchManga(q, this.client, 1, perPage, this.hideNSFW),
         ]);
  
         // If top page has exact normalized matches, return them immediately.
@@ -313,7 +332,7 @@ export class Target
         searchResults = pageRes;
       } else {
         // page === 1: do standard fetch with transient retry
-        searchResults = await searchManga(q, this.client, page, perPage);
+        searchResults = await searchManga(q, this.client, page, perPage, this.hideNSFW);
  
         // Transient failures sometimes cause the first attempt to return empty.
         // Retry up to 2 additional times immediately for page 1 to improve perceived reliability.
@@ -324,7 +343,7 @@ export class Target
         ) {
           for (let attempt = 0; attempt < 2; attempt++) {
             try {
-              const retryAttempt = await searchManga(q, this.client, page, perPage);
+              const retryAttempt = await searchManga(q, this.client, page, perPage, this.hideNSFW);
               if (retryAttempt && Array.isArray((retryAttempt as any).hits) && (retryAttempt as any).hits.length > 0) {
                 searchResults = retryAttempt as any;
                 break;
@@ -341,7 +360,7 @@ export class Target
       // If requested page > 1 and the API returns no hits, fallback to page 1 to avoid an empty screen
       if ((!searchResults || !Array.isArray((searchResults as any).hits) || (searchResults as any).hits.length === 0) && page > 1) {
         
-        const retry = await searchManga(q, this.client, 1, perPage);
+        const retry = await searchManga(q, this.client, 1, perPage, this.hideNSFW);
         if (retry && Array.isArray((retry as any).hits) && (retry as any).hits.length > 0) {
           page = 1; // normalize for isLastPage calc and logs
           searchResults = retry as any;
@@ -492,6 +511,32 @@ export class Target
       subtitle: `No manga found for "${q}"`,
     };
     return { results: [item], isLastPage: true };
+  }
+
+  async getPreferenceMenu() {
+    await this.ensurePrefs();
+    return {
+      sections: [
+        {
+          header: "Content",
+          children: [
+            UIToggle({
+              id: "hide_nsfw",
+              title: "Hide NSFW Content",
+              value: this.hideNSFW,
+              didChange: async (value: boolean) => {
+                this.hideNSFW = value;
+                try {
+                  await ObjectStore.set("atsumaru_hide_nsfw", value);
+                } catch (error) {
+                  console.error("Failed to save preference:", error);
+                }
+              },
+            }),
+          ],
+        },
+      ],
+    };
   }
 
   async getDirectoryConfig(): Promise<DirectoryConfig> {

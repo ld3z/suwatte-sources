@@ -135,20 +135,31 @@ export async function getSeriesById(
         ? proxifyImage(`https://atsu.moe/static/${_posterField.id}`)
         : "/assets/cubari_logo.png";
 
+      const mainTitle = mangaData.englishTitle || mangaData.title;
+      const additionalTitles: string[] = [];
+      if (mangaData.englishTitle && mangaData.title && mangaData.englishTitle !== mangaData.title) {
+        additionalTitles.push(mangaData.title);
+      }
+      if (Array.isArray(mangaData.otherNames)) {
+        for (const name of mangaData.otherNames) {
+          const val = typeof name === "string" ? name : name?.name || name?.title;
+          if (val && val !== mainTitle && !additionalTitles.includes(val)) {
+            additionalTitles.push(val);
+          }
+        }
+      }
+
       const result = {
-        title: mangaData.englishTitle || mangaData.title,
+        title: mainTitle,
         cover: _cover,
         webUrl: `https://atsu.moe/manga/${rawId}`,
+        additionalTitles,
         summary:
           synopsis ||
-          `No description available for "${
-            mangaData.englishTitle || mangaData.title
-          }"`,
+          `No description available for "${mainTitle}"`,
         description:
           synopsis ||
-          `No description available for "${
-            mangaData.englishTitle || mangaData.title
-          }"`,
+          `No description available for "${mainTitle}"`,
         creators: mangaData.authors?.map((author: any) => author.name) || [],
         status: mangaData.status
           ? getPublicationStatus(mangaData.status)

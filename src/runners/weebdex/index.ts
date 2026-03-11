@@ -176,10 +176,11 @@ export class Target
 
       // Also expose latest updates for discovery
       try {
-        const feed = await getLatestFeed(this.client, 1, 20);
+        const feed = await getLatestFeed(this.client, 1, 100);
         if (feed?.data?.length > 0) {
           const seen = new Set<string>();
           const items: Highlight[] = [];
+          const TARGET = 20;
 
           for (const chapter of feed.data) {
             const relationshipManga = chapter.relationships?.manga;
@@ -222,6 +223,7 @@ export class Target
               subtitle: isNSFW ? `${subtitle} • NSFW` : subtitle,
               isNSFW: isNSFW || undefined,
             } as any);
+            if (items.length >= TARGET) break;
           }
 
           if (items.length > 0) {

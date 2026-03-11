@@ -41,6 +41,7 @@ import {
   getChapterData,
   getLatestFeed,
   getMangaById,
+  getRecommendations,
   getTopManga,
   mangaListToHighlights,
   mangaToContent,
@@ -168,7 +169,7 @@ export class Target
           items: [
             {
               id: "info",
-              title: "WeebDex - Manga Reader",
+              title: "WeebDex",
               subtitle: "Search for manga using the search bar",
               cover: "/assets/weebdex_logo.png",
             },
@@ -183,7 +184,16 @@ export class Target
     try {
       const { id } = parseMangaId(contentId);
       const manga = await getMangaById(id, this.client);
-      return mangaToContent(manga);
+      let recommendations: any[] | undefined;
+      try {
+        const recResponse = await getRecommendations(id, this.client);
+        if (recResponse?.data?.length > 0) {
+          recommendations = recResponse.data;
+        }
+      } catch {
+        // Recommendations are non-critical
+      }
+      return mangaToContent(manga, recommendations);
     } catch (error: any) {
       if (error?.name === "CloudflareError") throw error;
       console.error(`Failed to get content ${contentId}:`, error);

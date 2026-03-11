@@ -3,6 +3,7 @@ import {
   ChapterData,
   Content,
   Highlight,
+  HighlightCollection,
   Property,
   PublicationStatus,
   Tag as SuwatteTag,
@@ -215,6 +216,19 @@ export async function getLatestFeed(
 }
 
 /**
+ * Get recommendations for a manga
+ */
+export async function getRecommendations(
+  mangaId: string,
+  client: SimpleNetworkClient
+): Promise<MangaListResponse> {
+  return fetchJSON<MangaListResponse>(
+    `/manga/${mangaId}/recommendations`,
+    client
+  );
+}
+
+/**
  * Get top manga by views
  */
 export async function getTopManga(
@@ -238,7 +252,7 @@ export async function getTopManga(
 /**
  * Convert WeebDex manga to Suwatte Content
  */
-export function mangaToContent(manga: Manga): Content {
+export function mangaToContent(manga: Manga, recommendations?: Manga[]): Content {
   const contentId = buildMangaId(manga.id);
   const primaryTitle = getPrimaryTitle(manga);
   const altTitles = getAltTitles(manga);
@@ -325,6 +339,42 @@ export function mangaToContent(manga: Manga): Content {
   // Generate slug from title for proper URL
   const titleSlug = generateSlug(primaryTitle);
 
+  // Build collections from related manga
+  const collections: HighlightCollection[] = [];
+  if (manga.relationships?.relations && manga.relationships.relations.length > 0) {
+    const highlights: Highlight[] = manga.relationships.relations.map((rel) => {
+      let relCover = "/assets/weebdex_logo.png";
+      if (rel.relationships?.cover) {
+        const coverId = rel.relationships.cover.id;
+        const ext = rel.relationships.cover.ext || "jpg";
+        relCover = proxifyImage(getCoverUrl(rel.id, coverId, ext, "256"));
+      }
+
+      const relType = rel.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+      return {
+        id: buildMangaId(rel.id),
+        title: rel.title || "Unknown",
+        cover: relCover,
+        subtitle: relType,
+      };
+    });
+
+    collections.push({
+      id: "related",
+      title: "Related Titles",
+      highlights,
+    });
+  }
+
+  if (recommendations && recommendations.length > 0) {
+    collections.push({
+      id: "recommendations",
+      title: "Recommendations",
+      highlights: mangaListToHighlights(recommendations),
+    });
+  }
+
   return {
     title: primaryTitle,
     cover,
@@ -332,6 +382,7 @@ export function mangaToContent(manga: Manga): Content {
     status: publicationStatus,
     properties,
     additionalTitles,
+    collections: collections.length > 0 ? collections : undefined,
     webUrl: `https://weebdex.org/title/${manga.id}/${titleSlug}`,
     creators: manga.relationships?.authors?.map((a) => a.name) || [],
   };

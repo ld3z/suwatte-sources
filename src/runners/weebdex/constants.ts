@@ -82,3 +82,26 @@ export const LANGUAGE_OPTIONS: [string, string][] = [
   ["Ukrainian", "uk"],
   ["Vietnamese", "vi"],
 ];
+
+export const SORT_OPTIONS: [string, string][] = [
+  ["Latest Upload", "lastUploadedChapterAt"],
+  ["Relevance", "relevance"],
+  ["Most Viewed", "views"],
+  ["Most Followed", "follows"],
+  ["Highest Rated", "rating"],
+  ["Most Chapters", "chapters"],
+  ["Year", "year"],
+  ["Title", "title"],
+  ["Created Date", "createdAt"],
+  ["Updated Date", "updatedAt"],
+];
+
+export const SORT_ORDER_OPTIONS: [string, "asc" | "desc"][] = [
+  ["Descending", "desc"],
+  ["Ascending", "asc"],
+];
+
+export const TAG_MODE_OPTIONS: [string, "AND" | "OR"][] = [
+  ["AND", "AND"],
+  ["OR", "OR"],
+];

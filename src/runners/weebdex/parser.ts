@@ -31,7 +31,30 @@ import {
   Manga,
   MangaListResponse,
   AggregatedChapterResponse,
+  TagListResponse,
 } from "./types";
+
+export interface SearchMangaFilters {
+  sort?: string;
+  order?: "asc" | "desc";
+  demographic?: string;
+  status?: string | string[];
+  contentRating?: string[];
+  lang?: string[];
+  langx?: string[];
+  availableTranslatedLang?: string[];
+  yearFrom?: number;
+  yearTo?: number;
+  tag?: string[];
+  tagx?: string[];
+  tmod?: "AND" | "OR";
+  txmod?: "AND" | "OR";
+  hasChapters?: boolean;
+}
+
+function isPornographic(manga?: { content_rating?: string }): boolean {
+  return manga?.content_rating === "pornographic";
+}
 
 /**
  * Search manga by title
@@ -40,16 +63,57 @@ export async function searchManga(
   query: string,
   client: SimpleNetworkClient,
   page: number = 1,
-  limit: number = 20
+  limit: number = 20,
+  filters?: SearchMangaFilters
 ): Promise<MangaListResponse> {
   const params: Record<string, any> = {
     title: query,
     limit,
     page,
-    order: "desc",
-    sort: "relevance",
-    contentRating: ["safe", "suggestive", "erotica"],
+    order: filters?.order ?? "desc",
+    sort: filters?.sort ?? (query ? "relevance" : "views"),
+    contentRating: filters?.contentRating ?? ["safe", "suggestive", "erotica"],
+    hasChapters: filters?.hasChapters ?? true,
   };
+
+  if (filters?.demographic) {
+    params.demographic = [filters.demographic];
+  }
+
+  if (filters?.status) {
+    params.status = Array.isArray(filters.status)
+      ? filters.status
+      : [filters.status];
+  }
+
+  if (filters?.lang && filters.lang.length > 0) {
+    params.lang = filters.lang;
+  }
+  if (filters?.langx && filters.langx.length > 0) {
+    params.langx = filters.langx;
+  }
+  if (
+    filters?.availableTranslatedLang &&
+    filters.availableTranslatedLang.length > 0
+  ) {
+    params.availableTranslatedLang = filters.availableTranslatedLang;
+  }
+
+  if (typeof filters?.yearFrom === "number") {
+    params.yearFrom = filters.yearFrom;
+  }
+  if (typeof filters?.yearTo === "number") {
+    params.yearTo = filters.yearTo;
+  }
+
+  if (filters?.tag && filters.tag.length > 0) {
+    params.tag = filters.tag;
+    params.tmod = filters.tmod ?? "AND";
+  }
+  if (filters?.tagx && filters.tagx.length > 0) {
+    params.tagx = filters.tagx;
+    params.txmod = filters.txmod ?? "OR";
+  }
 
   return fetchJSON<MangaListResponse>("/manga", client, params);
 }
@@ -233,8 +297,8 @@ export async function getRecommendations(
  */
 export async function getTopManga(
   client: SimpleNetworkClient,
-  rank: "views" | "follows" | "rating" = "views",
-  time: "1d" | "7d" | "30d" | "all" = "7d",
+  rank: "views" | "read" = "views",
+  time: "24h" | "7d" | "30d" = "7d",
   page: number = 1,
   limit: number = 20
 ): Promise<MangaListResponse> {
@@ -246,13 +310,32 @@ export async function getTopManga(
     contentRating: ["safe", "suggestive", "erotica"],
   };
 
-  return fetchJSON<MangaListResponse>("/top/manga", client, params);
+  return fetchJSON<MangaListResponse>("/manga/top", client, params);
+}
+
+/**
+ * Get available tags for manga search filters
+ */
+export async function getTagList(
+  client: SimpleNetworkClient,
+  page: number = 1,
+  limit: number = 100
+): Promise<TagListResponse> {
+  const params: Record<string, any> = {
+    page,
+    limit,
+  };
+  return fetchJSON<TagListResponse>("/manga/tag", client, params);
 }
 
 /**
  * Convert WeebDex manga to Suwatte Content
  */
-export function mangaToContent(manga: Manga, recommendations?: Manga[]): Content {
+export function mangaToContent(
+  manga: Manga,
+  recommendations?: Manga[],
+  options?: { hideNSFW?: boolean }
+): Content {
   const contentId = buildMangaId(manga.id);
   const primaryTitle = getPrimaryTitle(manga);
   const altTitles = getAltTitles(manga);
@@ -342,7 +425,9 @@ export function mangaToContent(manga: Manga, recommendations?: Manga[]): Content
   // Build collections from related manga
   const collections: HighlightCollection[] = [];
   if (manga.relationships?.relations && manga.relationships.relations.length > 0) {
-    const highlights: Highlight[] = manga.relationships.relations.map((rel) => {
+    const highlights: Highlight[] = manga.relationships.relations
+      .filter((rel) => !(options?.hideNSFW && isPornographic(rel)))
+      .map((rel) => {
       let relCover = "/assets/weebdex_logo.png";
       if (rel.relationships?.cover) {
         const coverId = rel.relationships.cover.id;
@@ -352,26 +437,39 @@ export function mangaToContent(manga: Manga, recommendations?: Manga[]): Content
 
       const relType = rel.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
-      return {
+      const item = {
         id: buildMangaId(rel.id),
         title: rel.title || "Unknown",
         cover: relCover,
         subtitle: relType,
       };
+      if (isPornographic(rel)) {
+        return {
+          ...item,
+          subtitle: `${item.subtitle} • NSFW`,
+          isNSFW: true,
+        } as any;
+      }
+      return item;
     });
 
-    collections.push({
-      id: "related",
-      title: "Related Titles",
-      highlights,
-    });
+    if (highlights.length > 0) {
+      collections.push({
+        id: "related",
+        title: "Related Titles",
+        highlights,
+      });
+    }
   }
 
   if (recommendations && recommendations.length > 0) {
+    const filteredRecommendations = options?.hideNSFW
+      ? recommendations.filter((item) => !isPornographic(item))
+      : recommendations;
     collections.push({
       id: "recommendations",
       title: "Recommendations",
-      highlights: mangaListToHighlights(recommendations),
+      highlights: mangaListToHighlights(filteredRecommendations),
     });
   }
 
@@ -385,6 +483,7 @@ export function mangaToContent(manga: Manga, recommendations?: Manga[]): Content
     collections: collections.length > 0 ? collections : undefined,
     webUrl: `https://weebdex.org/title/${manga.id}/${titleSlug}`,
     creators: manga.relationships?.authors?.map((a) => a.name) || [],
+    isNSFW: isPornographic(manga),
   };
 }
 
@@ -498,12 +597,20 @@ export function mangaListToHighlights(mangaList: Manga[]): Highlight[] {
       subtitle = subtitle ? `${subtitle} • ${manga.year}` : String(manga.year);
     }
 
-    return {
+    const item = {
       id: buildMangaId(manga.id),
       title,
       cover,
       subtitle: subtitle || undefined,
     };
+    if (isPornographic(manga)) {
+      return {
+        ...item,
+        subtitle: item.subtitle ? `${item.subtitle} • NSFW` : "NSFW",
+        isNSFW: true,
+      } as any;
+    }
+    return item;
   });
 }
 

@@ -5,6 +5,7 @@ import {
   ContentSource,
   DirectoryConfig,
   DirectoryRequest,
+  FilterType,
   Highlight,
   ImageRequestHandler,
   NetworkRequest,
@@ -17,6 +18,7 @@ import {
   SectionStyle,
   SourceConfig,
   UIMultiPicker,
+  UIToggle,
 } from "@suwatte/daisuke";
 import {
   BASE_URL,
@@ -28,20 +30,26 @@ import {
   REQUIRED_HEADERS,
   LANGUAGE_OPTIONS,
   SITE_URL,
+  SORT_OPTIONS,
+  SORT_ORDER_OPTIONS,
+  TAG_MODE_OPTIONS,
 } from "./constants";
 import {
   buildMangaId,
+  formatChapterNumber,
+  getCoverUrl,
   parseChapterId,
   parseMangaId,
+  proxifyImage,
   SimpleNetworkClient,
 } from "./helpers";
 import {
-  chapterListToHighlights,
   getAllChapters,
   getChapterData,
   getLatestFeed,
   getMangaById,
   getRecommendations,
+  getTagList,
   getTopManga,
   mangaListToHighlights,
   mangaToContent,
@@ -61,7 +69,9 @@ export class Target
   };
   private client: SimpleNetworkClient = new NetworkClient();
   private preferredLanguages: string[] = [];
+  private hidePornographic: boolean = false;
   private _prefsLoaded: boolean = false;
+  private tagFilterOptions: { id: string; title: string }[] | null = null;
 
   private async ensurePrefs(): Promise<void> {
     if (this._prefsLoaded) return;
@@ -74,12 +84,37 @@ export class Target
     } catch {
       this.preferredLanguages = [];
     }
+    try {
+      const pref = await ObjectStore.boolean("weebdex_hide_pornographic");
+      this.hidePornographic = pref ?? false;
+    } catch {
+      this.hidePornographic = false;
+    }
   }
 
   async getPreferenceMenu(): Promise<{ sections: any[] }> {
     await this.ensurePrefs();
     return {
       sections: [
+        {
+          header: "General",
+          footer: "Hide titles marked as NSFW (pornographic). Does not hide (erotica).",
+          children: [
+            UIToggle({
+              id: "hide_nsfw_titles",
+              title: "Hide NSFW Titles",
+              value: this.hidePornographic,
+              didChange: async (value: boolean) => {
+                this.hidePornographic = value;
+                try {
+                  await ObjectStore.set("weebdex_hide_pornographic", value);
+                } catch (error) {
+                  console.error("Failed to save preference:", error);
+                }
+              },
+            }),
+          ],
+        },
         {
           header: "Languages",
           footer:
@@ -117,42 +152,107 @@ export class Target
   }
 
   async getSectionsForPage(_link: PageLink): Promise<PageSection[]> {
+    await this.ensurePrefs();
     try {
-      // Try to get most viewed manga, fall back to search if it fails
+      const sections: PageSection[] = [];
+
+      // Use official top manga endpoint
       try {
         const response = await getTopManga(this.client, "views", "7d", 1, 20);
         if (response && response.data && response.data.length > 0) {
-          const highlights = mangaListToHighlights(response.data);
-          return [
-            {
-              id: "most_viewed",
-              title: "Most Viewed (7 Days)",
-              style: SectionStyle.STANDARD_GRID,
-              items: highlights,
-            },
-          ];
+          const visible = this.hidePornographic
+            ? response.data.filter((m) => m.content_rating !== "pornographic")
+            : response.data;
+          sections.push({
+            id: "most_viewed",
+            title: "Most Viewed (7 Days)",
+            style: SectionStyle.GALLERY,
+            items: mangaListToHighlights(visible),
+          });
         }
       } catch (topError) {
-        console.error(
-          "Top manga endpoint failed, trying alternative:",
-          topError
-        );
+        console.error("Top manga endpoint failed:", topError);
       }
 
-      // Fallback: Use search with empty query to get popular manga
+      // Also expose latest updates for discovery
+      try {
+        const feed = await getLatestFeed(this.client, 1, 20);
+        if (feed?.data?.length > 0) {
+          const seen = new Set<string>();
+          const items: Highlight[] = [];
+
+          for (const chapter of feed.data) {
+            const relationshipManga = chapter.relationships?.manga;
+            const mangaId = relationshipManga?.id;
+            if (!mangaId || seen.has(mangaId)) {
+              continue;
+            }
+            seen.add(mangaId);
+
+            const mappedManga = feed.map?.manga?.[mangaId];
+            const manga = mappedManga ?? relationshipManga;
+            if (
+              this.hidePornographic &&
+              manga?.content_rating === "pornographic"
+            ) {
+              continue;
+            }
+            const coverRel = manga?.relationships?.cover;
+
+            let cover = "/assets/weebdex_logo.png";
+            if (coverRel?.id) {
+              cover = proxifyImage(
+                getCoverUrl(mangaId, coverRel.id, coverRel.ext || "jpg", "256")
+              );
+            }
+
+            const chapterLabel = formatChapterNumber(
+              chapter.chapter,
+              chapter.volume
+            );
+            const subtitle = chapter.title
+              ? `${chapterLabel} - ${chapter.title}`
+              : chapterLabel;
+            const isNSFW = manga?.content_rating === "pornographic";
+
+            items.push({
+              id: buildMangaId(mangaId),
+              title: manga?.title || "Unknown Manga",
+              cover,
+              subtitle: isNSFW ? `${subtitle} • NSFW` : subtitle,
+              isNSFW: isNSFW || undefined,
+            } as any);
+          }
+
+          if (items.length > 0) {
+          sections.push({
+            id: "latest_updates",
+            title: "Latest Updates",
+            style: SectionStyle.STANDARD_GRID,
+            items,
+          });
+          }
+        }
+      } catch (feedError) {
+        console.error("Latest feed endpoint failed:", feedError);
+      }
+
+      if (sections.length > 0) {
+        return sections;
+      }
+
+      // Fallback: use search browse if top/feed are empty
       const searchResponse = await searchManga("", this.client, 1, 20);
-      if (
-        searchResponse &&
-        searchResponse.data &&
-        searchResponse.data.length > 0
-      ) {
-        const highlights = mangaListToHighlights(searchResponse.data);
+      if (searchResponse?.data?.length > 0) {
+        const visible = this.hidePornographic
+          ? searchResponse.data.filter((m) => m.content_rating !== "pornographic")
+          : searchResponse.data;
         return [
           {
             id: "popular",
             title: "Popular Manga",
             style: SectionStyle.STANDARD_GRID,
-            items: highlights,
+            items: mangaListToHighlights(visible),
           },
         ];
       }
@@ -181,9 +281,15 @@ export class Target
 
   // --- ContentSource ---
   async getContent(contentId: string): Promise<Content> {
+    await this.ensurePrefs();
     try {
       const { id } = parseMangaId(contentId);
       const manga = await getMangaById(id, this.client);
+      if (this.hidePornographic && manga.content_rating === "pornographic") {
+        throw new Error(
+          "This title is hidden by your NSFW preference. Disable 'Hide NSFW Titles' to view it."
+        );
+      }
       let recommendations: any[] | undefined;
       try {
         const recResponse = await getRecommendations(id, this.client);
@@ -193,7 +299,9 @@ export class Target
       } catch {
         // Recommendations are non-critical
       }
-      return mangaToContent(manga, recommendations);
+      return mangaToContent(manga, recommendations, {
+        hideNSFW: this.hidePornographic,
+      });
     } catch (error: any) {
       if (error?.name === "CloudflareError") throw error;
       console.error(`Failed to get content ${contentId}:`, error);
@@ -288,14 +396,80 @@ export class Target
   }
 
   async getDirectory(request: DirectoryRequest): Promise<PagedResult> {
+    await this.ensurePrefs();
     const query = request.query?.trim() || "";
     const page = request.page || 1;
     const limit = 20;
+    const filters = request.filters ?? {};
+
+    const tagFilter =
+      filters.tags &&
+      typeof filters.tags === "object" &&
+      !Array.isArray(filters.tags)
+        ? (filters.tags as { included?: string[]; excluded?: string[] })
+        : undefined;
+
+    const yearFromRaw = filters.year_from;
+    const yearToRaw = filters.year_to;
+    const yearFrom =
+      typeof yearFromRaw === "string" && yearFromRaw.trim() !== ""
+        ? parseInt(yearFromRaw, 10)
+        : undefined;
+    const yearTo =
+      typeof yearToRaw === "string" && yearToRaw.trim() !== ""
+        ? parseInt(yearToRaw, 10)
+        : undefined;
+
+    const searchFilters = {
+      sort: typeof filters.sort === "string" ? filters.sort : undefined,
+      order:
+        filters.order === "asc" || filters.order === "desc"
+          ? (filters.order as "asc" | "desc")
+          : undefined,
+      demographic:
+        typeof filters.demographic === "string" ? filters.demographic : undefined,
+      status: typeof filters.status === "string" ? filters.status : undefined,
+      contentRating:
+        typeof filters.content_rating === "string"
+          ? [filters.content_rating]
+          : DEFAULT_CONTENT_RATINGS,
+      availableTranslatedLang:
+        typeof filters.language === "string" ? [filters.language] : undefined,
+      yearFrom: typeof yearFrom === "number" && !isNaN(yearFrom) ? yearFrom : undefined,
+      yearTo: typeof yearTo === "number" && !isNaN(yearTo) ? yearTo : undefined,
+      tag: tagFilter?.included?.length ? tagFilter.included : undefined,
+      tagx: tagFilter?.excluded?.length ? tagFilter.excluded : undefined,
+      tmod:
+        filters.tag_include_mode === "OR" ? "OR" : ("AND" as "AND" | "OR"),
+      txmod:
+        filters.tag_exclude_mode === "AND" ? "AND" : ("OR" as "AND" | "OR"),
+      hasChapters: true,
+    };
 
     // If no query, show popular manga via search
     if (!query) {
       try {
-        // Try top manga first
+        const hasActiveFilters = Object.values(filters).some((value) => {
+          if (value === undefined || value === null) return false;
+          if (typeof value === "string") return value.trim().length > 0;
+          if (Array.isArray(value)) return value.length > 0;
+          if (typeof value === "object") return Object.keys(value).length > 0;
+          return true;
+        });
+
+        // If filters are applied, use search endpoint so filter criteria are respected.
+        if (hasActiveFilters) {
+          const filtered = await searchManga("", this.client, page, limit, searchFilters);
+          const visible = this.hidePornographic
+            ? filtered.data.filter((m) => m.content_rating !== "pornographic")
+            : filtered.data;
+          return {
+            results: mangaListToHighlights(visible),
+            isLastPage: filtered.data.length < limit || page * limit >= filtered.total,
+          };
+        }
+
+        // Try top manga first for clean browse
         try {
           const response = await getTopManga(
             this.client,
@@ -305,7 +479,10 @@ export class Target
             limit
           );
           if (response && response.data && response.data.length > 0) {
-            const highlights = mangaListToHighlights(response.data);
+            const visible = this.hidePornographic
+              ? response.data.filter((m) => m.content_rating !== "pornographic")
+              : response.data;
+            const highlights = mangaListToHighlights(visible);
             return {
               results: highlights,
               isLastPage: response.data.length < limit,
@@ -316,9 +493,12 @@ export class Target
         }
 
         // Fallback: search with sort by relevance
-        const response = await searchManga("a", this.client, page, limit);
+        const response = await searchManga("", this.client, page, limit, searchFilters);
         if (response && response.data && response.data.length > 0) {
-          const highlights = mangaListToHighlights(response.data);
+          const visible = this.hidePornographic
+            ? response.data.filter((m) => m.content_rating !== "pornographic")
+            : response.data;
+          const highlights = mangaListToHighlights(visible);
           return {
             results: highlights,
             isLastPage:
@@ -345,7 +525,7 @@ export class Target
 
     // Search for manga
     try {
-      const response = await searchManga(query, this.client, page, limit);
+      const response = await searchManga(query, this.client, page, limit, searchFilters);
 
       if (!response || !response.data || response.data.length === 0) {
         return {
@@ -361,7 +541,10 @@ export class Target
         };
       }
 
-      const highlights = mangaListToHighlights(response.data);
+      const visible = this.hidePornographic
+        ? response.data.filter((m) => m.content_rating !== "pornographic")
+        : response.data;
+      const highlights = mangaListToHighlights(visible);
       const isLastPage =
         response.data.length < limit || page * limit >= response.total;
 
@@ -387,8 +570,98 @@ export class Target
   }
 
   async getDirectoryConfig(): Promise<DirectoryConfig> {
-    // Simple config without filters for now
-    return { filters: [] };
+    if (!this.tagFilterOptions) {
+      try {
+        const tags = await getTagList(this.client, 1, 100);
+        this.tagFilterOptions = tags.data
+          .map((tag) => ({
+            id: tag.id,
+            title: tag.name,
+          }))
+          .sort((a, b) => a.title.localeCompare(b.title));
+      } catch (error) {
+        console.error("Failed to load tag filters:", error);
+        this.tagFilterOptions = [];
+      }
+    }
+
+    return {
+      filters: [
+        {
+          type: FilterType.SELECT,
+          id: "sort",
+          title: "Sort By",
+          options: SORT_OPTIONS.map(([title, id]) => ({ id, title })),
+        },
+        {
+          type: FilterType.SELECT,
+          id: "order",
+          title: "Sort Order",
+          options: SORT_ORDER_OPTIONS.map(([title, id]) => ({ id, title })),
+        },
+        {
+          type: FilterType.SELECT,
+          id: "status",
+          title: "Publication Status",
+          options: Object.entries(PUBLICATION_STATUS).map(([id, title]) => ({
+            id,
+            title,
+          })),
+        },
+        {
+          type: FilterType.SELECT,
+          id: "demographic",
+          title: "Demographic",
+          options: Object.entries(DEMOGRAPHICS).map(([id, title]) => ({
+            id,
+            title,
+          })),
+        },
+        {
+          type: FilterType.SELECT,
+          id: "content_rating",
+          title: "Content Rating",
+          options: Object.entries(CONTENT_RATINGS).map(([id, title]) => ({
+            id,
+            title,
+          })),
+        },
+        {
+          type: FilterType.SELECT,
+          id: "language",
+          title: "Original Language",
+          options: LANGUAGE_OPTIONS.map(([title, id]) => ({ id, title })),
+        },
+        {
+          type: FilterType.TEXT,
+          id: "year_from",
+          title: "Year From",
+        },
+        {
+          type: FilterType.TEXT,
+          id: "year_to",
+          title: "Year To",
+        },
+        {
+          type: FilterType.EXCLUDABLE_MULTISELECT,
+          id: "tags",
+          title: "Tags",
+          options: this.tagFilterOptions,
+        },
+        {
+          type: FilterType.SELECT,
+          id: "tag_include_mode",
+          title: "Tag Include Mode",
+          options: TAG_MODE_OPTIONS.map(([title, id]) => ({ id, title })),
+        },
+        {
+          type: FilterType.SELECT,
+          id: "tag_exclude_mode",
+          title: "Tag Exclude Mode",
+          options: TAG_MODE_OPTIONS.map(([title, id]) => ({ id, title })),
+        },
+      ],
+    };
   }
 
   // --- ImageRequestHandler ---

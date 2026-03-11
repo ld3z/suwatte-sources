@@ -78,7 +78,7 @@ export async function getChaptersForManga(
       limit,
       page,
       order: "desc",
-      sort: "published_at",
+      sort: "publishedAt",
     };
 
     if (translatedLanguage && translatedLanguage.length > 0) {

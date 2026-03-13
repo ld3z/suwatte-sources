@@ -3,6 +3,7 @@ import {
   ChapterData,
   Content,
   Highlight,
+  HighlightCollection,
   Property,
   PublicationStatus,
 } from "@suwatte/daisuke";
@@ -20,6 +21,7 @@ import {
   ChapterDataResponse,
   ChapterListResponse,
   Manga,
+  RecommendationsResponse,
   SearchResponse,
   SingleMangaResponse,
   Term,
@@ -81,7 +83,9 @@ export function mangaToContent(
   manga: Manga,
   posterQuality: string = "large",
   showAltTitles: boolean = false,
-  scorePosition: string = "top"
+  scorePosition: string = "top",
+  recommendations?: Manga[],
+  options?: { hideNSFW?: boolean }
 ): Content {
   const rating = generateStarRating(manga.rated_avg || 0);
 
@@ -193,6 +197,20 @@ export function mangaToContent(
     });
   }
 
+  const collections: HighlightCollection[] = [];
+  if (recommendations && recommendations.length > 0) {
+    const filtered = options?.hideNSFW
+      ? recommendations.filter((m) => !m.is_nsfw)
+      : recommendations;
+    if (filtered.length > 0) {
+      collections.push({
+        id: "recommendations",
+        title: "Recommendations",
+        highlights: mangaListToHighlights(filtered, posterQuality),
+      });
+    }
+  }
+
   return {
     title: manga.title,
     cover: getPosterUrl(manga.poster, posterQuality),
@@ -200,8 +218,9 @@ export function mangaToContent(
     status,
     creators: manga.author?.map((a) => a.title) || [],
     properties,
+    collections: collections.length > 0 ? collections : undefined,
     webUrl: `${BASE_URL}/title/${manga.hash_id}`,
-    recommendedPanelMode: manga.type === "manhwa" ? 1 : 0, // 1 for webtoon/vertical, 0 for page-by-page
+    recommendedPanelMode: manga.type === "manhwa" ? 1 : 0,
     isNSFW: manga.is_nsfw,
     additionalTitles: manga.alt_titles || [],
   };
@@ -222,7 +241,9 @@ export function mangaListToHighlights(
 // Get manga by ID
 export async function getMangaById(
   hashId: string,
-  client: SimpleNetworkClient
+  client: SimpleNetworkClient,
+  recommendations?: Manga[],
+  options?: { hideNSFW?: boolean }
 ): Promise<Content> {
   const url = `${API_URL}/manga/${hashId}?includes[]=demographic&includes[]=genre&includes[]=theme&includes[]=author&includes[]=artist&includes[]=publisher`;
 
@@ -230,7 +251,14 @@ export async function getMangaById(
   const data: SingleMangaResponse =
     typeof response === "string" ? JSON.parse(response) : response;
 
-  return mangaToContent(data.result);
+  return mangaToContent(
+    data.result,
+    undefined,
+    undefined,
+    undefined,
+    recommendations,
+    options
+  );
 }
 
 // Search manga
@@ -520,6 +548,39 @@ export async function getPopularManga(
   const data: SearchResponse =
     typeof response === "string" ? JSON.parse(response) : response;
   return data;
+}
+
+// Get recommendations for a manga (fetches all pages)
+export async function getRecommendations(
+  hashId: string,
+  client: SimpleNetworkClient
+): Promise<Manga[]> {
+  const firstUrl = `${API_URL}/manga/${hashId}/recommendations?limit=5&page=1`;
+  const response = await client.get(firstUrl);
+  const data: RecommendationsResponse =
+    typeof response === "string" ? JSON.parse(response) : response;
+
+  const items = [...data.result.items];
+  const totalPages = data.result.pagination.last_page;
+
+  if (totalPages > 1) {
+    const remaining = Array.from(
+      { length: totalPages - 1 },
+      (_, i) => i + 2
+    );
+    const results = await Promise.all(
+      remaining.map(async (page) => {
+        const url = `${API_URL}/manga/${hashId}/recommendations?limit=5&page=${page}`;
+        const res = await client.get(url);
+        const d: RecommendationsResponse =
+          typeof res === "string" ? JSON.parse(res) : res;
+        return d.result.items;
+      })
+    );
+    results.forEach((pageItems) => items.push(...pageItems));
+  }
+
+  return items;
 }
 
 // Get latest updates

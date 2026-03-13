@@ -28,6 +28,7 @@ import {
   getLatestManga,
   getMangaById,
   getPopularManga,
+  getRecommendations,
   mangaListToHighlights,
   searchManga,
 } from "./parser";
@@ -217,9 +218,18 @@ export class Target
 
   // --- ContentSource ---
   async getContent(contentId: string): Promise<Content> {
+    await this.ensurePrefs();
     try {
       const { hashId } = parseMangaId(contentId);
-      const content = await getMangaById(hashId, this.client);
+      let recommendations: Manga[] | undefined;
+      try {
+        recommendations = await getRecommendations(hashId, this.client);
+      } catch {
+        // Recommendations are non-critical
+      }
+      const content = await getMangaById(hashId, this.client, recommendations, {
+        hideNSFW: this.hideNSFW,
+      });
       return content;
     } catch (error: any) {
       if (error?.name === "CloudflareError") throw error;

@@ -76,6 +76,13 @@ export interface ChapterDataResponse {
   };
 }
 
+export interface RecommendationsResponse {
+  result: {
+    items: Manga[];
+    pagination: Pagination;
+  };
+}
+
 // Filter types
 export interface FilterState {
   sortBy?: string;

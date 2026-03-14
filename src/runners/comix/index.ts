@@ -221,15 +221,27 @@ export class Target
     await this.ensurePrefs();
     try {
       const { hashId } = parseMangaId(contentId);
-      let recommendations: Manga[] | undefined;
-      try {
-        recommendations = await getRecommendations(hashId, this.client);
-      } catch {
-        // Recommendations are non-critical
+      const [content, recommendations] = await Promise.all([
+        getMangaById(hashId, this.client, undefined, {
+          hideNSFW: this.hideNSFW,
+        }),
+        getRecommendations(hashId, this.client).catch(() => undefined),
+      ]);
+      if (recommendations && recommendations.length > 0) {
+        const filtered = this.hideNSFW
+          ? recommendations.filter((m) => !m.is_nsfw)
+          : recommendations;
+        if (filtered.length > 0) {
+          const recCollection = {
+            id: "recommendations",
+            title: "Recommendations",
+            highlights: mangaListToHighlights(filtered),
+          };
+          content.collections = content.collections
+            ? [...content.collections, recCollection]
+            : [recCollection];
+        }
       }
-      const content = await getMangaById(hashId, this.client, recommendations, {
-        hideNSFW: this.hideNSFW,
-      });
       return content;
     } catch (error: any) {
       if (error?.name === "CloudflareError") throw error;

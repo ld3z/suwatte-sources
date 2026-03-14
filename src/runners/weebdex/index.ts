@@ -156,87 +156,96 @@ export class Target
     try {
       const sections: PageSection[] = [];
 
-      // Use official top manga endpoint
-      try {
-        const response = await getTopManga(this.client, "views", "7d", 1, 20);
-        if (response && response.data && response.data.length > 0) {
-          const visible = this.hidePornographic
-            ? response.data.filter((m) => m.content_rating !== "pornographic")
-            : response.data;
-          sections.push({
-            id: "most_viewed",
-            title: "Most Viewed (7 Days)",
-            style: SectionStyle.GALLERY,
-            items: mangaListToHighlights(visible),
-          });
+      const [topSettled, feedSettled] = await Promise.allSettled([
+        getTopManga(this.client, "views", "7d", 1, 20),
+        getLatestFeed(this.client, 1, 100),
+      ]);
+
+      for (const settled of [topSettled, feedSettled]) {
+        if (
+          settled.status === "rejected" &&
+          (settled.reason as any)?.name === "CloudflareError"
+        ) {
+          throw settled.reason;
         }
-      } catch (topError) {
-        console.error("Top manga endpoint failed:", topError);
       }
 
-      // Also expose latest updates for discovery
-      try {
-        const feed = await getLatestFeed(this.client, 1, 100);
-        if (feed?.data?.length > 0) {
-          const seen = new Set<string>();
-          const items: Highlight[] = [];
-          const TARGET = 20;
+      if (
+        topSettled.status === "fulfilled" &&
+        topSettled.value?.data?.length > 0
+      ) {
+        const visible = this.hidePornographic
+          ? topSettled.value.data.filter((m) => m.content_rating !== "pornographic")
+          : topSettled.value.data;
+        sections.push({
+          id: "most_viewed",
+          title: "Most Viewed (7 Days)",
+          style: SectionStyle.GALLERY,
+          items: mangaListToHighlights(visible),
+        });
+      }
 
-          for (const chapter of feed.data) {
-            const relationshipManga = chapter.relationships?.manga;
-            const mangaId = relationshipManga?.id;
-            if (!mangaId || seen.has(mangaId)) {
-              continue;
-            }
-            seen.add(mangaId);
+      if (
+        feedSettled.status === "fulfilled" &&
+        feedSettled.value?.data?.length > 0
+      ) {
+        const feed = feedSettled.value;
+        const seen = new Set<string>();
+        const items: Highlight[] = [];
+        const TARGET = 20;
 
-            const mappedManga = feed.map?.manga?.[mangaId];
-            const manga = mappedManga ?? relationshipManga;
-            if (
-              this.hidePornographic &&
-              manga?.content_rating === "pornographic"
-            ) {
-              continue;
-            }
-            const coverRel = manga?.relationships?.cover;
+        for (const chapter of feed.data) {
+          const relationshipManga = chapter.relationships?.manga;
+          const mangaId = relationshipManga?.id;
+          if (!mangaId || seen.has(mangaId)) {
+            continue;
+          }
+          seen.add(mangaId);
 
-            let cover = "/assets/weebdex_logo.png";
-            if (coverRel?.id) {
-              cover = proxifyImage(
-                getCoverUrl(mangaId, coverRel.id, coverRel.ext || "jpg", "256")
-              );
-            }
+          const mappedManga = feed.map?.manga?.[mangaId];
+          const manga = mappedManga ?? relationshipManga;
+          if (
+            this.hidePornographic &&
+            manga?.content_rating === "pornographic"
+          ) {
+            continue;
+          }
+          const coverRel = manga?.relationships?.cover;
 
-            const chapterLabel = formatChapterNumber(
-              chapter.chapter,
-              chapter.volume
+          let cover = "/assets/weebdex_logo.png";
+          if (coverRel?.id) {
+            cover = proxifyImage(
+              getCoverUrl(mangaId, coverRel.id, coverRel.ext || "jpg", "256")
             );
-            const subtitle = chapter.title
-              ? `${chapterLabel} - ${chapter.title}`
-              : chapterLabel;
-            const isNSFW = manga?.content_rating === "pornographic";
-
-            items.push({
-              id: buildMangaId(mangaId),
-              title: manga?.title || "Unknown Manga",
-              cover,
-              subtitle: isNSFW ? `${subtitle} • NSFW` : subtitle,
-              isNSFW: isNSFW || undefined,
-            } as any);
-            if (items.length >= TARGET) break;
           }
 
-          if (items.length > 0) {
+          const chapterLabel = formatChapterNumber(
+            chapter.chapter,
+            chapter.volume
+          );
+          const subtitle = chapter.title
+            ? `${chapterLabel} - ${chapter.title}`
+            : chapterLabel;
+          const isNSFW = manga?.content_rating === "pornographic";
+
+          items.push({
+            id: buildMangaId(mangaId),
+            title: manga?.title || "Unknown Manga",
+            cover,
+            subtitle: isNSFW ? `${subtitle} • NSFW` : subtitle,
+            isNSFW: isNSFW || undefined,
+          } as any);
+          if (items.length >= TARGET) break;
+        }
+
+        if (items.length > 0) {
           sections.push({
             id: "latest_updates",
             title: "Latest Updates",
             style: SectionStyle.STANDARD_GRID,
             items,
           });
-          }
         }
-      } catch (feedError) {
-        console.error("Latest feed endpoint failed:", feedError);
       }
 
       if (sections.length > 0) {
@@ -286,21 +295,17 @@ export class Target
     await this.ensurePrefs();
     try {
       const { id } = parseMangaId(contentId);
-      const manga = await getMangaById(id, this.client);
+      const [manga, recResponse] = await Promise.all([
+        getMangaById(id, this.client),
+        getRecommendations(id, this.client).catch(() => null),
+      ]);
       if (this.hidePornographic && manga.content_rating === "pornographic") {
         throw new Error(
           "This title is hidden by your NSFW preference. Disable 'Hide NSFW Titles' to view it."
         );
       }
-      let recommendations: any[] | undefined;
-      try {
-        const recResponse = await getRecommendations(id, this.client);
-        if (recResponse?.data?.length > 0) {
-          recommendations = recResponse.data;
-        }
-      } catch {
-        // Recommendations are non-critical
-      }
+      const recommendations =
+        (recResponse?.data?.length ?? 0) > 0 ? recResponse!.data : undefined;
       return mangaToContent(manga, recommendations, {
         hideNSFW: this.hidePornographic,
       });

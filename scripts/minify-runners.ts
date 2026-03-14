@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, writeFileSync } from "fs";
+import { copyFileSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { minify } from "terser";
 
@@ -18,4 +18,7 @@ const files = readdirSync(dir).filter((f) => f.endsWith(".stt"));
     writeFileSync(fp, result.code);
     console.log(`${file}: ${code.length} → ${result.code.length} bytes (${saved}% smaller)`);
   }
+
+  copyFileSync("robots.txt", "stt/robots.txt");
+  console.log("Copied robots.txt → stt/robots.txt");
 })();

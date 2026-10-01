@@ -1,0 +1,31 @@
+{
+  "name": "suwatte-sources",
+  "version": "1.0.0",
+  "description": "",
+  "suwatte": {
+    "listName": "ldez's Sources"
+  },
+  "main": "index.js",
+  "scripts": {
+    "test": "tsx test-runner.ts",
+    "serve": "suwatte serve",
+    "build": "suwatte build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.8.1",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.8.1",
+  "dependencies": {
+    "@suwatte/toolchain": "^1.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

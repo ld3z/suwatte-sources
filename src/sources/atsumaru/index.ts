@@ -57,17 +57,10 @@ import {
   AtsumaruReadChapterResponse,
   AtsumaruSearchResponse,
 } from "./types";
+import { info } from "./info";
 
 export default class Atsumaru implements Delegate {
-  static info: SourceInfo = {
-    id: "en.atsumaru",
-    name: "Atsumaru",
-    version: 1.0,
-    website: BASE_URL,
-    languages: ["en"],
-    rating: ContentRating.MATURE,
-    thumbnail: "atsumaru.png",
-  };
+  static info: SourceInfo = info;
 
   client = new HttpClient({
     baseUrl: BASE_URL,
@@ -228,7 +221,6 @@ export default class Atsumaru implements Delegate {
       ),
       SearchFilter("year", "Release Year (e.g. 2024)", TextFilter()),
       SearchFilter("min_chapters", "Minimum Chapters", TextFilter()),
-      SearchFilter("adult", "Show Adult Content", ToggleFilter()),
       SearchFilter(
         "official",
         "Only Official Translations",
@@ -274,8 +266,7 @@ export default class Atsumaru implements Delegate {
     const query = rawQuery.length > 0 ? rawQuery : "*";
     const filterBy: string[] = ["hidden:!=true"];
 
-    const pref18 = (await ObjectStore.boolean(PREF_SHOW_18)) ?? false;
-    let showAdult = pref18;
+    const showAdult = (await ObjectStore.boolean(PREF_SHOW_18)) ?? false;
 
     if (request.filters) {
       const f = request.filters as Record<string, any>;
@@ -328,11 +319,6 @@ export default class Atsumaru implements Delegate {
         if (!isNaN(minChap)) {
           filterBy.push(`chapterCount:>=${minChap}`);
         }
-      }
-
-      // Adult content toggle
-      if (typeof f.adult === "boolean") {
-        showAdult = f.adult || pref18;
       }
 
       // Official translations

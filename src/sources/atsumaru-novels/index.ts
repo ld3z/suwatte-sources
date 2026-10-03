@@ -778,9 +778,7 @@ export default class AtsumaruNovels implements Delegate {
     return {
       id: item.id,
       title: item.title,
-      subtitle:
-        item.type ||
-        (typeof item.views === "string" ? `${item.views} views` : undefined),
+      subtitle: "Novel",
       coverImage: this.extractCover(item),
       webUrl: `${BASE_URL}/novel/${item.id}`,
       rating,

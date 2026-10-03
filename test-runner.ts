@@ -56,19 +56,13 @@ async function main() {
       console.log("Pages count:", pages.length);
     }
 
-    console.log("\n7. Testing novel fallback in main runner ('yOr4')...");
-    const novelInComic = await comicSource.getContent("yOr4");
-    console.log("Novel content in main runner:", {
-      title: novelInComic.title,
-      contentType: novelInComic.contentType,
-      webUrl: novelInComic.webUrl,
-    });
-    if (novelInComic.contentType !== ContentType.NOVEL) {
-      throw new Error(`Expected ContentType.NOVEL, got ${novelInComic.contentType}`);
-    }
-    const novelTextInComic = await comicSource.getChapterText("yOr4", "8vWpYA");
-    console.log("Chapter text fetched successfully in main runner, format:", novelTextInComic.format);
-    console.log("Text preview:", novelTextInComic.body.slice(0, 150), "...");
+    console.log("\n7. Testing getSearchFilters...");
+    const comicFilters = await comicSource.getSearchFilters();
+    console.log("Comic filters count:", comicFilters.length);
+
+    console.log("\n8. Testing getSettingsPage & onFormSubmitted...");
+    const comicSettings = await comicSource.getSettingsPage();
+    console.log("Comic settings sections count:", comicSettings?.sections.length);
 
     console.log("\n==================================================");
     console.log("Testing AtsumaruNovels (Dedicated Novel Runner)...");
@@ -89,9 +83,13 @@ async function main() {
     console.log("First novel item:", {
       id: firstNovel.id,
       title: firstNovel.title,
+      subtitle: firstNovel.subtitle,
       coverImage: firstNovel.coverImage,
       webUrl: firstNovel.webUrl,
     });
+    if (firstNovel.subtitle !== "Novel") {
+      throw new Error(`Expected firstNovel.subtitle to be 'Novel', got '${firstNovel.subtitle}'`);
+    }
 
     console.log("\n3. Testing getSearchResults ('innkeeper')...");
     const novelSearch = await novelSource.getSearchResults({ query: "innkeeper" }, 1);

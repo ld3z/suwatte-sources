@@ -21,7 +21,7 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@12.8.1",
+  "packageManager": "pnpm@12.9.1",
   "dependencies": {
     "@suwatte/toolchain": "^1.0.0",
     "cheerio": "^1.2.0",

@@ -26,7 +26,10 @@ import {
   TextFilter,
   ToggleFilter,
   UIForm,
+  UIPicker,
   UISelect,
+  UIStepper,
+  UITextField,
   UIToggle,
   WebLink,
 } from "@suwatte/toolchain";
@@ -35,12 +38,21 @@ import {
   BASE_URL,
   BROWSE_LIMIT,
   CDN_URL,
+  CONTENT_RATING_OPTIONS,
+  DEFAULT_CONTENT_TYPES,
+  DEFAULT_MAX_CONTENT_RATING,
   FEED_POPULAR_DAILY,
   FEED_POPULAR_MONTHLY,
   FEED_POPULAR_WEEKLY,
   FEED_RECENTLY_UPDATED,
   GENRE_OPTIONS,
+  PREF_CONTENT_TYPES,
   PREF_EXCLUDE_GENRES,
+  PREF_EXCLUDE_GENRES_IN_SEARCH,
+  PREF_HIDDEN_KEYWORDS,
+  PREF_MAX_CONTENT_RATING,
+  PREF_MIN_CHAPTERS,
+  PREF_OFFICIAL_ONLY,
   PREF_SHOW_18,
   SORT_OPTIONS,
   STATUS_OPTIONS,
@@ -76,6 +88,37 @@ export default class Atsumaru implements Delegate {
 
   private scanlatorMapCache = new Map<string, Map<string, string>>();
   private cachedFilters: SearchFilter[] | null = null;
+
+  private async getAdvancedPrefs() {
+    const [
+      contentTypes,
+      maxContentRating,
+      minChapters,
+      officialOnly,
+      hiddenKeywords,
+      excludeGenresInSearch,
+    ] = await Promise.all([
+      ObjectStore.stringArray(PREF_CONTENT_TYPES),
+      ObjectStore.string(PREF_MAX_CONTENT_RATING),
+      ObjectStore.number(PREF_MIN_CHAPTERS),
+      ObjectStore.boolean(PREF_OFFICIAL_ONLY),
+      ObjectStore.string(PREF_HIDDEN_KEYWORDS),
+      ObjectStore.boolean(PREF_EXCLUDE_GENRES_IN_SEARCH),
+    ]);
+
+    return {
+      contentTypes:
+        contentTypes && contentTypes.length > 0 ? contentTypes : null,
+      maxContentRating: maxContentRating ?? DEFAULT_MAX_CONTENT_RATING,
+      minChapters: minChapters ?? 0,
+      officialOnly: officialOnly ?? false,
+      hiddenKeywords: (hiddenKeywords ?? "")
+        .split(",")
+        .map((k) => k.trim().toLowerCase())
+        .filter((k) => k.length > 0),
+      excludeGenresInSearch: excludeGenresInSearch ?? false,
+    };
+  }
 
   getConfiguration(): SourceConfiguration {
     return {
@@ -137,7 +180,10 @@ export default class Atsumaru implements Delegate {
         ? `&excludedTags=${excludedGenres.join(",")}`
         : "";
 
-    const defaultParams = `offset=${offset}&limit=${BROWSE_LIMIT}&types=Manga,Manwha,Manhua,OEL&mediums=Comic${adultParam}${excludedParam}`;
+    const prefs = await this.getAdvancedPrefs();
+    const types = (prefs.contentTypes ?? DEFAULT_CONTENT_TYPES).join(",");
+
+    const defaultParams = `offset=${offset}&limit=${BROWSE_LIMIT}&types=${types}&mediums=Comic${adultParam}${excludedParam}`;
 
     let path: string;
     switch (request.key) {
@@ -158,11 +204,19 @@ export default class Atsumaru implements Delegate {
 
     const response = await this.client.get(path);
     const data = await response.json<AtsumaruBrowseResponse>();
-    const items = (data.items || []).map((item) => this.toItem(item));
+    const rawItems = data.items || [];
+    const items = rawItems
+      .filter(
+        (item) =>
+          typeof item.chapterCount !== "number" ||
+          item.chapterCount >= prefs.minChapters
+      )
+      .filter((item) => !this.matchesHiddenKeyword(item, prefs.hiddenKeywords))
+      .map((item) => this.toItem(item));
 
     return {
       items,
-      isLastPage: items.length < BROWSE_LIMIT,
+      isLastPage: rawItems.length < BROWSE_LIMIT,
     };
   }
 
@@ -267,34 +321,63 @@ export default class Atsumaru implements Delegate {
     const filterBy: string[] = ["hidden:!=true"];
 
     const showAdult = (await ObjectStore.boolean(PREF_SHOW_18)) ?? false;
+    const prefs = await this.getAdvancedPrefs();
+    const f = (request.filters ?? {}) as Record<string, any>;
+
+    // Genres (tri-state / include & exclude)
+    const genreFilter = (f.genres ?? {}) as {
+      include?: string[];
+      exclude?: string[];
+    };
+    const includedGenres = genreFilter.include ?? [];
+    const excludedGenres = new Set(genreFilter.exclude ?? []);
+    if (prefs.excludeGenresInSearch) {
+      const browseExcluded =
+        (await ObjectStore.stringArray(PREF_EXCLUDE_GENRES)) ?? [];
+      browseExcluded
+        .filter((id) => !includedGenres.includes(id))
+        .forEach((id) => excludedGenres.add(id));
+    }
+    if (includedGenres.length > 0) {
+      filterBy.push(
+        includedGenres.map((id) => `genreIds:=\`${id}\``).join(" && ")
+      );
+    }
+    if (excludedGenres.size > 0) {
+      filterBy.push(
+        `genreIds:!=[${[...excludedGenres].map((id) => `\`${id}\``).join(",")}]`
+      );
+    }
+
+    // Types (search filter overrides the advanced setting)
+    const requestedTypes = (f.types as { include?: string[] } | undefined)
+      ?.include;
+    const types =
+      requestedTypes && requestedTypes.length > 0
+        ? requestedTypes
+        : prefs.contentTypes;
+    if (types && types.length > 0) {
+      filterBy.push(`type:=[${types.map((t) => `\`${t}\``).join(",")}]`);
+    }
+
+    // Min Chapters (search filter overrides the advanced setting)
+    let minChapters = prefs.minChapters;
+    if (f.min_chapters && typeof f.min_chapters === "string") {
+      const parsed = parseInt(f.min_chapters.trim(), 10);
+      if (!isNaN(parsed)) {
+        minChapters = parsed;
+      }
+    }
+    if (minChapters > 0) {
+      filterBy.push(`chapterCount:>=${minChapters}`);
+    }
+
+    // Official translations
+    if (f.official === true || prefs.officialOnly) {
+      filterBy.push("officialTranslation:=true");
+    }
 
     if (request.filters) {
-      const f = request.filters as Record<string, any>;
-
-      // Genres (tri-state / include & exclude)
-      if (f.genres) {
-        const { include, exclude } = f.genres as {
-          include?: string[];
-          exclude?: string[];
-        };
-        if (include && include.length > 0) {
-          filterBy.push(include.map((id) => `genreIds:=\`${id}\``).join(" && "));
-        }
-        if (exclude && exclude.length > 0) {
-          filterBy.push(
-            `genreIds:!=[${exclude.map((id) => `\`${id}\``).join(",")}]`
-          );
-        }
-      }
-
-      // Types
-      if (f.types) {
-        const types = (f.types as { include?: string[] }).include;
-        if (types && types.length > 0) {
-          filterBy.push(`type:=[${types.map((t) => `\`${t}\``).join(",")}]`);
-        }
-      }
-
       // Status
       if (f.status) {
         const status = (f.status as { include?: string[] }).include;
@@ -312,27 +395,21 @@ export default class Atsumaru implements Delegate {
           filterBy.push(`releaseYear:=[${yearInt}]`);
         }
       }
-
-      // Min Chapters
-      if (f.min_chapters && typeof f.min_chapters === "string") {
-        const minChap = parseInt(f.min_chapters.trim(), 10);
-        if (!isNaN(minChap)) {
-          filterBy.push(`chapterCount:>=${minChap}`);
-        }
-      }
-
-      // Official translations
-      if (f.official === true) {
-        filterBy.push("officialTranslation:=true");
-      }
     }
 
     if (!showAdult) {
       filterBy.push("isAdult:=false");
     }
 
+    const ratingIds = CONTENT_RATING_OPTIONS.map((o) => o.id);
+    const ratingIndex = ratingIds.indexOf(prefs.maxContentRating);
+    const maxRatingIndex = ratingIndex >= 0 ? ratingIndex : ratingIds.length - 1;
+    const allowedRatings = ratingIds
+      .slice(0, maxRatingIndex + 1)
+      .map((r) => `\`${r}\``)
+      .join(",");
     filterBy.push(
-      "(mbContentRating:=[`Safe`,`Suggestive`,`Erotica`] || mbContentRating:!=*)"
+      `(mbContentRating:=[${allowedRatings}] || mbContentRating:!=*)`
     );
     filterBy.push("medium:!=[`Novel`]");
     filterBy.push("views:>0");
@@ -362,20 +439,25 @@ export default class Atsumaru implements Delegate {
     const data = await response.json<AtsumaruSearchResponse>();
 
     if (data.hits && Array.isArray(data.hits)) {
-      const items = data.hits.map((h) => this.toItem(h.document));
+      const items = data.hits
+        .map((h) => h.document)
+        .filter((doc) => !this.matchesHiddenKeyword(doc, prefs.hiddenKeywords))
+        .map((doc) => this.toItem(doc));
       const perPage = data.request_params?.per_page ?? BROWSE_LIMIT;
       const found = data.found ?? 0;
-      const isLastPage = page * perPage >= found || items.length < perPage;
+      const isLastPage = page * perPage >= found || data.hits.length < perPage;
       return {
         items,
         total: found,
         isLastPage,
       };
     } else if (data.items && Array.isArray(data.items)) {
-      const items = data.items.map((item) => this.toItem(item));
+      const items = data.items
+        .filter((item) => !this.matchesHiddenKeyword(item, prefs.hiddenKeywords))
+        .map((item) => this.toItem(item));
       return {
         items,
-        isLastPage: items.length < BROWSE_LIMIT,
+        isLastPage: data.items.length < BROWSE_LIMIT,
       };
     }
 
@@ -658,6 +740,7 @@ export default class Atsumaru implements Delegate {
     const show18 = (await ObjectStore.boolean(PREF_SHOW_18)) ?? false;
     const excludedGenres =
       (await ObjectStore.stringArray(PREF_EXCLUDE_GENRES)) ?? [];
+    const prefs = await this.getAdvancedPrefs();
 
     return {
       sections: [
@@ -680,6 +763,59 @@ export default class Atsumaru implements Delegate {
             }),
           ],
         },
+        {
+          header: "Advanced Settings",
+          footer:
+            "Content types, minimum chapters, and hidden keywords apply to both browse feeds and search. Content rating and official-only apply to search. Filters chosen in a search override these defaults.",
+          views: [
+            UISelect({
+              id: PREF_CONTENT_TYPES,
+              title: "Content Types",
+              options: TYPE_OPTIONS,
+              exclude: false,
+              defaultValue: { include: DEFAULT_CONTENT_TYPES, exclude: [] },
+              currentValue: {
+                include: prefs.contentTypes ?? DEFAULT_CONTENT_TYPES,
+                exclude: [],
+              },
+            }),
+            UIPicker({
+              id: PREF_MAX_CONTENT_RATING,
+              title: "Maximum Content Rating",
+              options: CONTENT_RATING_OPTIONS,
+              defaultValue: DEFAULT_MAX_CONTENT_RATING,
+              currentValue: prefs.maxContentRating,
+            }),
+            UIStepper({
+              id: PREF_MIN_CHAPTERS,
+              title: "Minimum Chapters",
+              lowerBound: 0,
+              upperBound: 1000,
+              step: 5,
+              defaultValue: 0,
+              currentValue: prefs.minChapters,
+            }),
+            UIToggle({
+              id: PREF_OFFICIAL_ONLY,
+              title: "Only Official Translations",
+              defaultValue: false,
+              currentValue: prefs.officialOnly,
+            }),
+            UIToggle({
+              id: PREF_EXCLUDE_GENRES_IN_SEARCH,
+              title: "Apply Excluded Genres to Search",
+              defaultValue: false,
+              currentValue: prefs.excludeGenresInSearch,
+            }),
+            UITextField({
+              id: PREF_HIDDEN_KEYWORDS,
+              title: "Hide Titles Containing",
+              placeholder: "Comma-separated, e.g. isekai, reincarnated",
+              defaultValue: "",
+              currentValue: prefs.hiddenKeywords.join(", "),
+            }),
+          ],
+        },
       ],
     };
   }
@@ -693,9 +829,46 @@ export default class Atsumaru implements Delegate {
         (data[PREF_EXCLUDE_GENRES] as { include?: string[] }).include ?? [];
       await ObjectStore.set(PREF_EXCLUDE_GENRES, selected);
     }
+    if (data[PREF_CONTENT_TYPES] && typeof data[PREF_CONTENT_TYPES] === "object") {
+      const selected =
+        (data[PREF_CONTENT_TYPES] as { include?: string[] }).include ?? [];
+      await ObjectStore.set(PREF_CONTENT_TYPES, selected);
+    }
+    if (typeof data[PREF_MAX_CONTENT_RATING] === "string") {
+      await ObjectStore.set(PREF_MAX_CONTENT_RATING, data[PREF_MAX_CONTENT_RATING]);
+    }
+    if (typeof data[PREF_MIN_CHAPTERS] === "number") {
+      await ObjectStore.set(
+        PREF_MIN_CHAPTERS,
+        Math.max(0, Math.floor(data[PREF_MIN_CHAPTERS]))
+      );
+    }
+    if (typeof data[PREF_OFFICIAL_ONLY] === "boolean") {
+      await ObjectStore.set(PREF_OFFICIAL_ONLY, data[PREF_OFFICIAL_ONLY]);
+    }
+    if (typeof data[PREF_EXCLUDE_GENRES_IN_SEARCH] === "boolean") {
+      await ObjectStore.set(
+        PREF_EXCLUDE_GENRES_IN_SEARCH,
+        data[PREF_EXCLUDE_GENRES_IN_SEARCH]
+      );
+    }
+    if (typeof data[PREF_HIDDEN_KEYWORDS] === "string") {
+      await ObjectStore.set(PREF_HIDDEN_KEYWORDS, data[PREF_HIDDEN_KEYWORDS]);
+    }
   }
 
   // =============================== Helpers ===============================
+
+  private matchesHiddenKeyword(
+    item: AtsumaruBrowseItem,
+    keywords: string[]
+  ): boolean {
+    if (keywords.length === 0) return false;
+    const titles = [item.title, item.englishTitle]
+      .filter((t): t is string => typeof t === "string")
+      .map((t) => t.toLowerCase());
+    return keywords.some((k) => titles.some((t) => t.includes(k)));
+  }
 
   private buildQueryString(
     params: Record<string, string | number | boolean | undefined | null>

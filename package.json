@@ -23,7 +23,8 @@
   },
   "packageManager": "pnpm@12.8.1",
   "dependencies": {
-    "@suwatte/toolchain": "^1.0.0"
+    "@suwatte/toolchain": "^1.0.0",
+    "typescript": "^7.0.2"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

@@ -24,6 +24,7 @@
   "packageManager": "pnpm@12.8.1",
   "dependencies": {
     "@suwatte/toolchain": "^1.0.0",
+    "cheerio": "^1.2.0",
     "typescript": "^7.0.2"
   },
   "devDependencies": {

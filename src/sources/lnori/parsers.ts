@@ -7,7 +7,7 @@ import {
   WebLink,
 } from "@suwatte/toolchain";
 import { load } from "cheerio/slim";
-import type { AnyNode, Element } from "domhandler";
+import type { AnyNode, Element } from "domhandler" with { "resolution-mode": "import" };
 
 import {
   absoluteUrl,

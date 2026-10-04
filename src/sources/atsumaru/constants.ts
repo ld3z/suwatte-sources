@@ -70,7 +70,17 @@ export const SORT_OPTIONS: LabeledOption[] = [
   { id: "title", title: "Title" },
 ];
 
-export const FEED_POPULAR_DAILY = "popular_daily";
-export const FEED_POPULAR_WEEKLY = "popular_weekly";
-export const FEED_POPULAR_MONTHLY = "popular_monthly";
-export const FEED_RECENTLY_UPDATED = "recently_updated";
+export interface FeedDefinition {
+  id: string;
+  title: string;
+  endpoint: "popular" | "recentlyUpdated";
+  timeframe?: "daily" | "weekly" | "monthly";
+}
+
+/** Home page feeds, in display order. Unknown feed keys fall back to the first entry. */
+export const FEEDS: FeedDefinition[] = [
+  { id: "popular_daily", title: "Popular Today", endpoint: "popular", timeframe: "daily" },
+  { id: "popular_weekly", title: "Popular This Week", endpoint: "popular", timeframe: "weekly" },
+  { id: "popular_monthly", title: "Popular This Month", endpoint: "popular", timeframe: "monthly" },
+  { id: "recently_updated", title: "Recently Updated", endpoint: "recentlyUpdated" },
+];

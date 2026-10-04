@@ -4,7 +4,7 @@ import { BASE_URL } from "./constants";
 export const info: SourceInfo = {
   id: "en.ldez.atsumaru",
   name: "Atsumaru",
-  version: 1.0,
+  version: 1.1,
   website: BASE_URL,
   languages: ["en"],
   rating: ContentRating.MATURE,

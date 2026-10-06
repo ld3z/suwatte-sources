@@ -21,7 +21,7 @@ export const CONTENT_RATING_OPTIONS: LabeledOption[] = [
   { id: "Erotica", title: "Erotica" },
   { id: "Pornographic", title: "Pornographic" },
 ];
-export const DEFAULT_MAX_CONTENT_RATING = "Pornographic";
+export const DEFAULT_MAX_CONTENT_RATING = "Erotica";
 
 export const GENRE_OPTIONS: LabeledOption[] = [
   { id: "39", title: "Action" },

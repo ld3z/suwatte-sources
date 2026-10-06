@@ -92,12 +92,17 @@ function buildFilterBy(request: SearchRequest, prefs: Preferences): string[] {
     filterBy.push(`releaseYear:=[${year}]`);
   }
 
-  if (!prefs.showAdult) {
+  // Matches atsu.moe: allowing Pornographic surfaces adult titles even outside Adult Mode.
+  const allowedRatings = allowedContentRatings(prefs.maxContentRating);
+  if (prefs.showAdult) {
+    filterBy.push("isAdult:=true");
+  } else if (!allowedRatings.includes("Pornographic")) {
     filterBy.push("isAdult:=false");
   }
 
-  const ratings = backtickList(allowedContentRatings(prefs.maxContentRating));
-  filterBy.push(`(mbContentRating:=[${ratings}] || mbContentRating:!=*)`);
+  filterBy.push(
+    `(mbContentRating:=[${backtickList(allowedRatings)}] || mbContentRating:!=*)`
+  );
   filterBy.push("medium:!=[`Novel`]");
   filterBy.push("views:>0");
 

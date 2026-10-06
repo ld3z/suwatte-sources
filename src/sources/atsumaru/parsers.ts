@@ -83,7 +83,11 @@ export function toContent(page: AtsumaruMangaPage, contentId: string): Content {
 function parseContentRating(page: AtsumaruMangaPage): ContentRating {
   const genreNames = (page.genres ?? []).map((g) => g.name);
 
-  if (page.isAdult || genreNames.some((n) => MATURE_GENRES.includes(n))) {
+  if (
+    page.isAdult ||
+    page.mbContentRating === "Pornographic" ||
+    genreNames.some((n) => MATURE_GENRES.includes(n))
+  ) {
     return ContentRating.MATURE;
   }
   if (

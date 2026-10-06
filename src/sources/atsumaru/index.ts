@@ -33,7 +33,12 @@ import {
 import { info } from "./info";
 import { toChapters, toContent, toItem } from "./parsers";
 import { buildSearchPath, parseDeepLinkId, parseSearchResponse } from "./search";
-import { buildSettingsForm, loadPreferences, savePreferences } from "./settings";
+import {
+  allowedContentRatings,
+  buildSettingsForm,
+  loadPreferences,
+  savePreferences,
+} from "./settings";
 import {
   AtsumaruAllChaptersResponse,
   AtsumaruAvailableFilters,
@@ -97,6 +102,7 @@ export default class Atsumaru implements Delegate {
       `limit=${BROWSE_LIMIT}`,
       `types=${(prefs.contentTypes ?? DEFAULT_CONTENT_TYPES).join(",")}`,
       "mediums=Comic",
+      `contentRatings=${allowedContentRatings(prefs.maxContentRating).join(",")}`,
     ];
     if (prefs.showAdult) params.push("adult=1");
     if (prefs.excludedGenres.length > 0) {

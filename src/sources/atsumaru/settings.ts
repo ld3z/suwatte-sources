@@ -86,6 +86,8 @@ export function buildSettingsForm(prefs: Preferences): UIForm {
     sections: [
       {
         header: "Content Preferences",
+        footer:
+          "Adult Mode shows only 18+ titles. With it off, 18+ titles are hidden unless the maximum content rating is Pornographic.",
         views: [
           UIToggle({
             id: PREF_SHOW_18,

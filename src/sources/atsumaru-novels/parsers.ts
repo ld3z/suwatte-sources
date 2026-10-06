@@ -204,7 +204,8 @@ function parseLinks(page: AtsumaruMangaPage, webUrl: string): WebLink[] {
 /**
  * Converts raw chapters into Suwatte chapters, newest first. The API `number`
  * is the chapter's position on the site (used for ordering); the displayed
- * number is read from the title.
+ * number is read from the title, per translation group, since interleaved
+ * groups can number the same chapters differently.
  */
 export function toChapters(
   rawChapters: AtsumaruChapterItem[],
@@ -212,9 +213,7 @@ export function toChapters(
   contentId: string
 ): Chapter[] {
   const sorted = [...rawChapters].sort(compareOldestFirst);
-  const numbers = resolveChapterNumbers(
-    sorted.map((ch) => ({ title: ch.title, position: chapterPosition(ch) }))
-  );
+  const numbers = resolveNumbersPerGroup(sorted);
 
   const chapters: Chapter[] = sorted.map((ch, idx) => {
     const scanlatorName = ch.scanlationMangaId
@@ -241,6 +240,28 @@ export function toChapters(
   });
 
   return chapters;
+}
+
+/** Resolves numbers within each translation group, keeping the overall order. */
+function resolveNumbersPerGroup(sorted: AtsumaruChapterItem[]): number[] {
+  const groups = new Map<string, number[]>();
+  sorted.forEach((ch, idx) => {
+    const key = ch.scanlationMangaId ?? "";
+    const indices = groups.get(key);
+    if (indices) indices.push(idx);
+    else groups.set(key, [idx]);
+  });
+
+  const numbers: number[] = new Array(sorted.length);
+  for (const indices of groups.values()) {
+    const resolved = resolveChapterNumbers(
+      indices.map((i) => ({ title: sorted[i].title, position: chapterPosition(sorted[i]) }))
+    );
+    indices.forEach((i, k) => {
+      numbers[i] = resolved[k];
+    });
+  }
+  return numbers;
 }
 
 function chapterPosition(ch: AtsumaruChapterItem): number {

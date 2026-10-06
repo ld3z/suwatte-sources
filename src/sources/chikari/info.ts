@@ -2,11 +2,11 @@ import { ContentRating, SourceInfo } from "@suwatte/toolchain";
 import { BASE_URL } from "./constants";
 
 export const info: SourceInfo = {
-  id: "en.ldez.atsumaru.novels",
-  name: "Atsumaru (Novels)",
-  version: 1.2,
+  id: "en.ldez.chikari.novels",
+  name: "Chikari (Novels)",
+  version: 1.0,
   website: BASE_URL,
   languages: ["en"],
   rating: ContentRating.MATURE,
-  thumbnail: "atsumaru-novels.png",
+  thumbnail: "chikari.png",
 };

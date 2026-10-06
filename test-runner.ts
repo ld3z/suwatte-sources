@@ -1,9 +1,10 @@
 import emulate from "@suwatte/toolchain/emulator";
-import { ContentType, SourceChapterTextFormat } from "@suwatte/toolchain";
+import { ContentRating, ContentType, SourceChapterTextFormat } from "@suwatte/toolchain";
 import Atsumaru from "./src/sources/atsumaru";
 import AtsumaruNovels from "./src/sources/atsumaru-novels";
 import NovelFire from "./src/sources/novelfire";
 import LNORI from "./src/sources/lnori";
+import Chikari from "./src/sources/chikari";
 
 async function main() {
   const keepAlive = setInterval(() => {}, 1000);
@@ -145,6 +146,15 @@ async function main() {
       }
     }
 
+    console.log("\n6b. Testing chapter numbers with interleaved extras ('MQoG' - The Angel Next Door)...");
+    const angelChapters = (await novelSource.getChapters("MQoG")).slice().reverse();
+    const angelNumber = (prefix: string) =>
+      angelChapters.find((c) => c.title?.startsWith(prefix))?.number;
+    console.log("Chapter 7 ->", angelNumber("Chapter 7:"), "| Chapter 8 ->", angelNumber("Chapter 8:"), "| Chapter 266 ->", angelNumber("Chapter 266:"));
+    if (angelNumber("Chapter 8:") !== 8 || angelNumber("Chapter 266:") !== 266) {
+      throw new Error("Expected extras not to shift Angel Next Door chapter numbers");
+    }
+
     console.log("\n7. Testing getChapterText ('yOr4', '8vWpYA')...");
     const text2 = await novelSource.getChapterText("yOr4", "8vWpYA");
     console.log("yOr4 chapter 893 text preview:", text2.body.slice(0, 150), "...");
@@ -274,6 +284,89 @@ async function main() {
     console.log("First 120 chars:", lnoriText.body.slice(0, 120));
     if (!lnoriText.body.startsWith("<h2>Prologue</h2>") || /<div|<span|<img/i.test(lnoriText.body)) {
       throw new Error("Expected clean volume HTML starting at the Prologue");
+    }
+
+    console.log("\n==================================================");
+    console.log("Testing Chikari...");
+    console.log("==================================================");
+    const chikari = emulate(Chikari);
+    // The emulator shares one ObjectStore across runners, and Atsumaru Novels enables Adult Mode above.
+    await chikari.onFormSubmitted("reset", {
+      pref_18_mode: false,
+      pref_exclude_genres: { include: [], exclude: [] },
+    });
+
+    console.log("\n1. Testing getHomePage & getItemList...");
+    const chikariHome = await chikari.getHomePage();
+    for (const feed of chikariHome.feeds) {
+      const list = await chikari.getItemList({ key: feed.id }, 1);
+      console.log(` - ${feed.id}: ${list.items.length} items`);
+      if (list.items.length === 0) {
+        throw new Error(`Expected items in Chikari feed '${feed.id}'`);
+      }
+    }
+
+    console.log("\n2. Testing getSearchResults (keyword & filters)...");
+    const chikariSearch = await chikari.getSearchResults({ query: "shadow slave" }, 1);
+    console.log("Keyword hits:", chikariSearch.items.map((i) => i.title).slice(0, 3));
+    if (!chikariSearch.items.some((i) => i.id === "shadow-slave")) {
+      throw new Error("Expected 'shadow-slave' in Chikari keyword results");
+    }
+    const chikariFiltered = await chikari.getSearchResults(
+      { filters: { genres: { include: ["action"], exclude: ["romance"] }, status: { include: ["completed"] } } },
+      1
+    );
+    console.log("Filtered hits:", chikariFiltered.items.length, "total:", chikariFiltered.total);
+    if (chikariFiltered.items.length === 0) {
+      throw new Error("Expected filtered Chikari results");
+    }
+    const chikariFilters = await chikari.getSearchFilters();
+    console.log("Filters:", chikariFilters.map((f) => f.id));
+
+    console.log("\n3. Testing Adult Mode shows only 18+ titles...");
+    await chikari.onFormSubmitted("test", { pref_18_mode: true });
+    const adultList = await chikari.getItemList({ key: "popular" }, 1);
+    await chikari.onFormSubmitted("test", { pref_18_mode: false });
+    console.log("Adult feed items:", adultList.items.length);
+    if (adultList.items.length === 0 || adultList.items.some((i) => i.rating !== ContentRating.MATURE)) {
+      throw new Error("Expected only mature items in Adult Mode");
+    }
+
+    console.log("\n4. Testing getContent ('shadow-slave')...");
+    const chikariContent = await chikari.getContent("shadow-slave");
+    console.log("Content:", {
+      title: chikariContent.title,
+      status: chikariContent.status,
+      genres: chikariContent.genres?.map((g) => g.title),
+      credits: chikariContent.credits,
+    });
+    if (chikariContent.contentType !== ContentType.NOVEL) {
+      throw new Error(`Expected ContentType.NOVEL, got ${chikariContent.contentType}`);
+    }
+
+    console.log("\n5. Testing getChapters ('shadow-slave')...");
+    const chikariChapters = await chikari.getChapters("shadow-slave");
+    console.log("Chapters count:", chikariChapters.length, "latest:", chikariChapters[0]?.title);
+    if (chikariChapters.length <= 500) {
+      throw new Error("Expected chapters from more than one chapter list page");
+    }
+    if (chikariChapters.at(-1)?.id !== "1") {
+      throw new Error("Expected chapter 1 as the oldest chapter");
+    }
+    const academyChapters = await chikari.getChapters(
+      "i-became-the-student-council-president-of-academy-city"
+    );
+    const numberOf = (id: string) => academyChapters.find((c) => c.id === id)?.number;
+    console.log("Academy City #170 ->", numberOf("170"), "| #6 ->", numberOf("6"));
+    if (numberOf("170") !== 130 || numberOf("6") !== 5.1) {
+      throw new Error("Expected chapter numbers to come from titles, not site positions");
+    }
+
+    console.log("\n6. Testing getChapterText ('shadow-slave', '1')...");
+    const chikariText = await chikari.getChapterText("shadow-slave", "1");
+    console.log("First 150 chars:", chikariText.body.slice(0, 150));
+    if (chikariText.format !== SourceChapterTextFormat.HTML || !chikariText.body.startsWith("<p>")) {
+      throw new Error("Expected paragraph HTML for Chikari chapter text");
     }
 
     console.log("\nAll tests passed successfully for all runners!");

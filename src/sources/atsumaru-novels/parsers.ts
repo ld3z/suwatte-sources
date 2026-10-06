@@ -18,7 +18,12 @@ import {
   AtsumaruChapterItem,
   AtsumaruMangaPage,
 } from "./types";
-import { extractCover, formatImageUrl, nonEmpty } from "./utils";
+import {
+  extractCover,
+  formatImageUrl,
+  nonEmpty,
+  resolveChapterNumbers,
+} from "./utils";
 
 const MATURE_GENRES = ["Adult", "Hentai", "Smut"];
 const SUGGESTIVE_GENRES = ["Ecchi"];
@@ -196,20 +201,29 @@ function parseLinks(page: AtsumaruMangaPage, webUrl: string): WebLink[] {
 
 // =============================== Chapters ===============================
 
-/** Converts raw chapters into Suwatte chapters, newest first. */
+/**
+ * Converts raw chapters into Suwatte chapters, newest first. The API `number`
+ * is the chapter's position on the site (used for ordering); the displayed
+ * number is read from the title.
+ */
 export function toChapters(
   rawChapters: AtsumaruChapterItem[],
   scanlators: Map<string, string>,
   contentId: string
 ): Chapter[] {
-  const chapters: Chapter[] = rawChapters.map((ch, idx) => {
+  const sorted = [...rawChapters].sort(compareOldestFirst);
+  const numbers = resolveChapterNumbers(
+    sorted.map((ch) => ({ title: ch.title, position: chapterPosition(ch) }))
+  );
+
+  const chapters: Chapter[] = sorted.map((ch, idx) => {
     const scanlatorName = ch.scanlationMangaId
       ? scanlators.get(ch.scanlationMangaId)
       : undefined;
 
     return {
       id: ch.id,
-      number: typeof ch.number === "number" ? ch.number : -1,
+      number: numbers[idx],
       title: ch.title || undefined,
       index: idx,
       language: "en",
@@ -221,7 +235,7 @@ export function toChapters(
     };
   });
 
-  chapters.sort(compareNewestFirst);
+  chapters.reverse();
   chapters.forEach((ch, idx) => {
     ch.index = idx;
   });
@@ -229,14 +243,16 @@ export function toChapters(
   return chapters;
 }
 
-/** Orders by chapter number descending, then by upload date descending. */
-function compareNewestFirst(a: Chapter, b: Chapter): number {
-  if (b.number !== a.number) {
-    return b.number - a.number;
-  }
-  const timeA = a.date ? a.date.getTime() : 0;
-  const timeB = b.date ? b.date.getTime() : 0;
-  return timeB - timeA;
+function chapterPosition(ch: AtsumaruChapterItem): number {
+  if (typeof ch.number === "number") return ch.number;
+  return typeof ch.index === "number" ? ch.index + 1 : 0;
+}
+
+/** Orders by site position ascending, then by upload date ascending. */
+function compareOldestFirst(a: AtsumaruChapterItem, b: AtsumaruChapterItem): number {
+  const byPosition = chapterPosition(a) - chapterPosition(b);
+  if (byPosition !== 0) return byPosition;
+  return (parseTimestamp(a.createdAt)?.getTime() ?? 0) - (parseTimestamp(b.createdAt)?.getTime() ?? 0);
 }
 
 function parseTimestamp(value: unknown): Date | undefined {

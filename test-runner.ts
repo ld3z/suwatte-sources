@@ -484,6 +484,30 @@ async function main() {
       if (error?.name !== "ChapterUnavailable") throw error;
     }
 
+    console.log("\n8. Testing deep link & db chapters for The Villainess is the Heroine's Biggest Fan...");
+    const villainessDeep = await lunar.getSearchResults(
+      { query: "https://lunarx.to/novel/the-villainess-is-the-heroine-s-biggest-fan/143?lang=en" },
+      1
+    );
+    console.log("Villainess deep link hits:", villainessDeep.items.map((i) => i.title));
+    if (villainessDeep.items[0]?.id !== "the-villainess-is-the-heroine-s-biggest-fan") {
+      throw new Error("Expected deep link to resolve 'the-villainess-is-the-heroine-s-biggest-fan'");
+    }
+
+    const villainessChapters = await lunar.getChapters("the-villainess-is-the-heroine-s-biggest-fan");
+    console.log("Villainess chapters count:", villainessChapters.length, "| latest:", villainessChapters[0]?.title);
+    if (villainessChapters.length !== 143 || villainessChapters[0]?.number !== 143) {
+      throw new Error("Expected 143 chapters for The Villainess is the Heroine's Biggest Fan");
+    }
+
+    try {
+      await lunar.getChapterText("the-villainess-is-the-heroine-s-biggest-fan", "143");
+      throw new Error("Expected getChapterText to throw ChapterUnavailable for site-uploaded chapter");
+    } catch (error: any) {
+      console.log("Site-uploaded chapter message:", error?.message);
+      if (error?.name !== "ChapterUnavailable") throw error;
+    }
+
     console.log("\nAll tests passed successfully for all runners!");
   } finally {
     clearInterval(keepAlive);

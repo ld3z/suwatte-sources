@@ -142,7 +142,8 @@ export default class LunarX implements Delegate {
   }
 
   async getSearchResults(request: SearchRequest, page: number): Promise<PagedItemList> {
-    const deepLinkSlug = parseDeepLinkSlug(request.query?.trim() || "");
+    const rawQuery = request.query?.trim() || "";
+    const deepLinkSlug = parseDeepLinkSlug(rawQuery);
     if (deepLinkSlug && page === 1) {
       try {
         const content = await this.getContent(deepLinkSlug);
@@ -163,7 +164,7 @@ export default class LunarX implements Delegate {
       }
     }
 
-    const query = request.query?.trim();
+    const query = rawQuery;
     if (query && !request.filters) {
       // Query both Lunar's database (which contains LN volumes like The Devil is a Part-Timer)
       // and the mirrored provider catalog.
@@ -292,7 +293,7 @@ export default class LunarX implements Delegate {
     }
 
     throw new ChapterUnavailableError(
-      `Chapter text unavailable: ${novelUrl(contentId)}/${chapterId}`
+      `This chapter is uploaded directly to Lunar and is only readable via the website reader: ${novelUrl(contentId)}/${num}`
     );
   }
 

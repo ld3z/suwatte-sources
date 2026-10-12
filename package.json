@@ -17,11 +17,11 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "12.10.1",
+      "version": "12.11.2",
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@12.10.1",
+  "packageManager": "pnpm@12.11.2",
   "dependencies": {
     "@suwatte/toolchain": "^1.0.0",
     "cheerio": "^1.2.0",

@@ -790,7 +790,11 @@ async function main() {
           n: 2,
           label: "Chapter 2: The Return [Group A]",
           at: 1700000000000,
-          alts: [{ id: 13, label: "Ch. 2", group: { slug: "group-b", name: "Group B" } }],
+          alts: [
+            { id: 13, label: "Ch. 2", group: { slug: "group-b", name: "Group B" } },
+            { id: 14, label: "Chapter 2", group: { slug: "group-a", name: "Group A" } },
+            { id: 15, label: "Chapter 2", group: { slug: "group-b", name: "GROUP B" } },
+          ],
         },
         { id: 11, n: 1, vol: "1", label: "Chapter 1" },
       ],
@@ -825,7 +829,7 @@ async function main() {
       parsedChapters[1].title !== undefined ||
       parsedChapters[2].volume !== 1
     ) {
-      throw new Error("Expected each Toonkotsu upload as its own chapter");
+      throw new Error("Expected one Toonkotsu chapter per group, without same-group mirrors");
     }
 
     console.log("\n5. Testing live catalogue access...");

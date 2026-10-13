@@ -300,11 +300,20 @@ function parseVolume(value: string | number | null | undefined): number | undefi
  * to its group. The catalogue is English only.
  */
 export function toChapters({ chapters }: SeriesResponse): Chapter[] {
-  const releases = chapters.flatMap((entry) =>
-    [entry, ...(entry.alts ?? [])].map((release) => ({ entry, release }))
-  );
-  return releases.map(({ entry, release }, index) => {
-    const { title, group } = parseLabel(release, entry.n);
+  // Alts can be the same group's release mirrored from other upstreams; keep the first per group.
+  const releases = chapters.flatMap((entry) => {
+    const groups = new Set<string>();
+    return [entry, ...(entry.alts ?? [])]
+      .map((release) => ({ entry, release, label: parseLabel(release, entry.n) }))
+      .filter(({ label }) => {
+        const group = (label.group ?? "").trim().toLowerCase();
+        if (groups.has(group)) return false;
+        groups.add(group);
+        return true;
+      });
+  });
+  return releases.map(({ entry, release, label }, index) => {
+    const { title, group } = label;
     const at = release.at ?? entry.at;
     const id = String(release.id);
     return {

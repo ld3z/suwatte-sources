@@ -9,6 +9,24 @@ import LunarX from "./src/sources/lunarx";
 import Madokami from "./src/sources/madokami";
 import NovelBuddy from "./src/sources/novelbuddy";
 import NovelArchive from "./src/sources/novelarchive";
+import Toonkotsu from "./src/sources/toonkotsu";
+import {
+  decodeBase64Url,
+  decryptPage,
+  encodeBase64Url,
+  hmacSha256,
+  signReaderPath,
+} from "./src/sources/toonkotsu/crypto";
+import {
+  PAGE_KEY,
+  PAGE_NONCE,
+  parseChapterPages,
+  parseDeepLinkId as parseToonkotsuLink,
+  toChapters as toToonkotsuChapters,
+  toContent as toToonkotsuContent,
+} from "./src/sources/toonkotsu/parsers";
+import { createCipheriv, createHmac, randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import { parseChapterNumbers, parseDate } from "./src/sources/madokami/parsers";
 import { base64Encode, detailsPath } from "./src/sources/madokami/utils";
 import { wrapDelegateWithValidation } from "@suwatte/toolchain/validate";
@@ -654,6 +672,170 @@ async function main() {
     console.log("First 120 chars:", archiveText.body.slice(0, 120));
     if (!archiveText.body.startsWith("<p>A frail-looking")) {
       throw new Error("Expected paragraph HTML for Novel Archive chapter text");
+    }
+
+    console.log("\n==================================================");
+    console.log("Testing Toonkotsu...");
+    console.log("==================================================");
+    const toonkotsu = emulate(Toonkotsu);
+
+    console.log("\n1. Testing HMAC and reader signatures against node:crypto...");
+    const hmacKey = randomBytes(32);
+    const hmacMessage = Buffer.from("1700000000000.nonce./api/manga/chapter/1");
+    const expectedHmac = createHmac("sha256", hmacKey).update(hmacMessage).digest();
+    if (!Buffer.from(hmacSha256(hmacKey, hmacMessage)).equals(expectedHmac)) {
+      throw new Error("Expected HMAC-SHA256 to match node:crypto");
+    }
+    const longKey = randomBytes(100);
+    if (
+      !Buffer.from(hmacSha256(longKey, hmacMessage)).equals(
+        createHmac("sha256", longKey).update(hmacMessage).digest()
+      )
+    ) {
+      throw new Error("Expected HMAC-SHA256 to hash keys longer than a block");
+    }
+    const readerKey = { key: Uint8Array.from(hmacKey), offset: 0 };
+    const signature = signReaderPath(readerKey, "/api/manga/chapter/1");
+    const [version, time, nonce, mac] = signature.split(".");
+    const expectedMac = encodeBase64Url(
+      createHmac("sha256", hmacKey).update(`${time}.${nonce}./api/manga/chapter/1`).digest()
+    ).slice(0, 32);
+    console.log("Signature:", signature);
+    if (version !== "v1" || mac !== expectedMac || decodeBase64Url(nonce).length !== 12) {
+      throw new Error("Expected a v1 reader signature over time, nonce and path");
+    }
+
+    console.log("\n2. Testing AES-CTR page decryption against node:crypto...");
+    for (const keyLength of [16, 24, 32]) {
+      const pageKey = randomBytes(keyLength);
+      const pageNonce = randomBytes(12);
+      const plain = randomBytes(100_003);
+      const iv = Buffer.concat([pageNonce.subarray(0, 8), Buffer.alloc(8)]);
+      const cipher = createCipheriv(`aes-${keyLength * 8}-ctr`, pageKey, iv);
+      const encrypted = Buffer.concat([cipher.update(plain), cipher.final()]);
+      const decrypted = decryptPage(encrypted, pageKey, pageNonce.subarray(0, 8));
+      if (!Buffer.from(decrypted).equals(plain)) {
+        throw new Error(`Expected AES-${keyLength * 8}-CTR decryption to match node:crypto`);
+      }
+    }
+
+    console.log("\n3. Testing wrapped page keys and the decrypting image interceptor...");
+    const pageKey = randomBytes(16);
+    const pageNonce = randomBytes(12);
+    const nonceText = encodeBase64Url(pageNonce);
+    const mask = createHmac("sha256", hmacKey).update(`page.${nonceText}`).digest();
+    const wrappedKey = encodeBase64Url(pageKey.map((b, i) => b ^ mask[i % mask.length]));
+    const pages = parseChapterPages(
+      {
+        wrap: "v1",
+        chapter: { pages: [{ src: "/p/1.webp", k: wrappedKey, n: nonceText }, { src: "//cdn.x/2.png" }] },
+      },
+      readerKey
+    );
+    console.log("Pages:", pages);
+    if (
+      pages[0].url !== "https://toonkotsu.com/p/1.webp" ||
+      pages[0].context?.[PAGE_KEY] !== encodeBase64Url(pageKey) ||
+      pages[1].url !== "https://cdn.x/2.png" ||
+      pages[1].context
+    ) {
+      throw new Error("Expected unwrapped page keys and absolute page URLs");
+    }
+    const image = randomBytes(5000);
+    const imageCipher = createCipheriv(
+      "aes-128-ctr",
+      pageKey,
+      Buffer.concat([pageNonce.subarray(0, 8), Buffer.alloc(8)])
+    );
+    const encryptedImage = Buffer.concat([imageCipher.update(image), imageCipher.final()]);
+    const server = createServer((_req, res) => res.end(encryptedImage));
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const port = (server.address() as { port: number }).port;
+      const imageResponse = await (toonkotsu as any).client.get(
+        `http://127.0.0.1:${port}/p/1.webp`,
+        { context: pages[0].context }
+      );
+      if (!Buffer.from(await imageResponse.bytes()).equals(image)) {
+        throw new Error("Expected the image interceptor to decrypt the page");
+      }
+    } finally {
+      server.close();
+    }
+
+    console.log("\n4. Testing parsers with fixture data...");
+    if (
+      parseToonkotsuLink("https://toonkotsu.com/title/a1b2c-some-title") !== "a1b2c" ||
+      parseToonkotsuLink("https://toonkotsu.com/title/12345") !== null
+    ) {
+      throw new Error("Expected Toonkotsu title links to resolve to their id");
+    }
+    const fixture = {
+      series: {
+        id: 1,
+        hid: "a1b2c",
+        slug: "some-title",
+        title: "Tom &amp; Jerry",
+        titles: { english: "Tom & Jerry", romaji: "Tomu" },
+        type: "Manhwa",
+        tags: ["Action", "Ecchi", "Seinen", "Time Travel"],
+        status: "Complete",
+        cover: "/covers/a1b2c/460.webp",
+        score: 87,
+        authors: ["Someone"],
+      },
+      chapters: [
+        {
+          id: 12,
+          n: 2,
+          label: "Chapter 2: The Return [Group A]",
+          at: 1700000000000,
+          alts: [{ id: 13, label: "Ch. 2", group: { slug: "group-b", name: "Group B" } }],
+        },
+        { id: 11, n: 1, vol: "1", label: "Chapter 1" },
+      ],
+    };
+    const facets = { genres: [{ name: "Action" }, { name: "Ecchi" }, { name: "Time Travel", category: "Theme: Plot" }] };
+    const parsedContent = toToonkotsuContent(fixture, "a1b2c", facets);
+    console.log("Content:", {
+      title: parsedContent.title,
+      rating: parsedContent.rating,
+      status: parsedContent.status,
+      genres: parsedContent.genres?.map((g) => g.title),
+      properties: parsedContent.properties?.map((p) => p.id),
+      coverImage: parsedContent.coverImage,
+    });
+    if (
+      parsedContent.title !== "Tom & Jerry" ||
+      parsedContent.rating !== ContentRating.SUGGESTIVE ||
+      parsedContent.contentType !== ContentType.MANHWA ||
+      parsedContent.coverImage !== "https://toonkotsu.com/covers/a1b2c/720.webp" ||
+      parsedContent.webUrl !== "https://toonkotsu.com/title/a1b2c-some-title" ||
+      parsedContent.genres?.length !== 2 ||
+      parsedContent.properties?.map((p) => p.id).join() !== "themes,demographics"
+    ) {
+      throw new Error("Expected parsed Toonkotsu content details");
+    }
+    const parsedChapters = toToonkotsuChapters(fixture);
+    console.log("Chapters:", parsedChapters.map(({ id, number, title, providers }) => ({ id, number, title, group: providers?.[0]?.name })));
+    if (
+      parsedChapters.map((c) => c.id).join() !== "12,13,11" ||
+      parsedChapters[0].title !== "The Return" ||
+      parsedChapters[0].providers?.[0]?.name !== "Group A" ||
+      parsedChapters[1].title !== undefined ||
+      parsedChapters[2].volume !== 1
+    ) {
+      throw new Error("Expected each Toonkotsu upload as its own chapter");
+    }
+
+    console.log("\n5. Testing live catalogue access...");
+    try {
+      const toonkotsuHome = await toonkotsu.getHomePage();
+      const latest = await toonkotsu.getItemList({ key: toonkotsuHome.feeds[0].id }, 1);
+      console.log("First feed items:", latest.items.length);
+    } catch (error) {
+      if (!(error instanceof CloudflareError)) throw error;
+      console.log("Skipping live Toonkotsu tests (Cloudflare challenge):", error.resolutionURL);
     }
 
     console.log("\n==================================================");

@@ -26,7 +26,7 @@
     "@suwatte/toolchain": "^1.0.0",
     "cheerio": "^1.2.0",
     "domhandler": "^6.0.1",
-    "typescript": "^7.0.2"
+    "tsc-rs": "^0.6.0"
   },
   "devDependencies": {
     "tsx": "^4.23.15"

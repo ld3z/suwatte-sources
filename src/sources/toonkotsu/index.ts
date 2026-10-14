@@ -6,6 +6,7 @@ import {
   Content,
   Delegate,
   HomePage,
+  HttpClient as Client,
   HttpResponse,
   ItemListRequest,
   PagedItemList,
@@ -70,13 +71,27 @@ const API_PATH_REGEX = /\/(?:api|cdn\/v1)\//;
 const IMAGE_REGEX = /\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)/i;
 /** Lets refused reader requests through so their status and body can be inspected. */
 const acceptAnyStatus = () => true;
+/** Content details and the chapter list are requested together; both read one series response. */
+const SERIES_CACHE_MS = 60_000;
+const SERIES_CACHE_SIZE = 8;
 
 type ReaderSession = { readerKey: ReaderKey; response: ReaderKeyResponse };
 
 export default class Toonkotsu implements Delegate {
   static info: SourceInfo = info;
 
+  /** Suwatte loads page images through this client; the site's reader fetches a chapter's pages at once. */
   client = new HttpClient({
+    baseUrl: BASE_URL,
+    rateLimit: {
+      permits: 12,
+      period: 1,
+    },
+    cloudflareResolutionURL: `${BASE_URL}/`,
+  });
+
+  /** API calls keep their own budget, so page loads don't hold up browsing. */
+  private api = new HttpClient({
     baseUrl: BASE_URL,
     rateLimit: {
       permits: 5,
@@ -85,6 +100,7 @@ export default class Toonkotsu implements Delegate {
     cloudflareResolutionURL: `${BASE_URL}/`,
   });
 
+  private seriesCache = new Map<string, { at: number; promise: Promise<SeriesResponse> }>();
   private facetsPromise?: Promise<FacetsResponse>;
   private readerSession?: Promise<ReaderSession>;
   /**
@@ -96,7 +112,12 @@ export default class Toonkotsu implements Delegate {
   private latestSeen = new Set<number>();
 
   constructor() {
-    this.client.interceptors.request.use((request) => {
+    for (const client of [this.client, this.api]) this.setUpClient(client);
+    this.client.interceptors.response.use((response) => this.decryptPageResponse(response));
+  }
+
+  private setUpClient(client: Client) {
+    client.interceptors.request.use((request) => {
       const isApi = API_PATH_REGEX.test(request.url);
       const isImage = !!request.context?.[PAGE_KEY] || IMAGE_REGEX.test(request.url);
       request.headers.set(
@@ -112,12 +133,12 @@ export default class Toonkotsu implements Delegate {
       return request;
     });
 
-    this.client.interceptors.response.use((response) => {
+    client.interceptors.response.use((response) => {
       // The API answers in JSON and can't show the challenge; solving it on the site clears the domain.
       if (response.headers.get("cf-mitigated")?.toLowerCase() === "challenge") {
         throw new CloudflareError(`${BASE_URL}/`);
       }
-      return this.decryptPageResponse(response);
+      return response;
     });
   }
 
@@ -283,7 +304,7 @@ export default class Toonkotsu implements Delegate {
     const path = `/api/manga/chapter/${chapterId}`;
     for (let attempt = 0; ; attempt++) {
       const { readerKey, response } = await this.getReaderSession(chapterId);
-      const result = await this.client.get(path, {
+      const result = await this.api.get(path, {
         headers: { "x-sig": signReaderPath(readerKey, path) },
         validateStatus: acceptAnyStatus,
       });
@@ -325,17 +346,32 @@ export default class Toonkotsu implements Delegate {
   // =============================== Helpers ===============================
 
   private async getJson<T>(path: string, params: CatalogueParams = {}): Promise<T> {
-    const response = await this.client.get(path, { params: toQueryParams(params) });
+    const response = await this.api.get(path, { params: toQueryParams(params) });
     return response.json<T>();
   }
 
   private async postJson<T>(path: string, body: Record<string, unknown>): Promise<T> {
-    const response = await this.client.post(path, body);
+    const response = await this.api.post(path, body);
     return response.json<T>();
   }
 
   private getSeries(contentId: string): Promise<SeriesResponse> {
-    return this.getJson(`/cdn/v1/series/${encodeURIComponent(contentId)}`);
+    const now = Date.now();
+    const cached = this.seriesCache.get(contentId);
+    if (cached && now - cached.at < SERIES_CACHE_MS) return cached.promise;
+
+    const promise = this.getJson<SeriesResponse>(
+      `/cdn/v1/series/${encodeURIComponent(contentId)}`
+    ).catch((error: unknown) => {
+      if (this.seriesCache.get(contentId)?.promise === promise) this.seriesCache.delete(contentId);
+      throw error;
+    });
+    this.seriesCache.delete(contentId);
+    this.seriesCache.set(contentId, { at: now, promise });
+    while (this.seriesCache.size > SERIES_CACHE_SIZE) {
+      this.seriesCache.delete(this.seriesCache.keys().next().value as string);
+    }
+    return promise;
   }
 
   private getFacets(): Promise<FacetsResponse> {
@@ -358,7 +394,7 @@ export default class Toonkotsu implements Delegate {
   }
 
   private ensureSiteSession(): Promise<void> {
-    this.siteSession ??= this.client
+    this.siteSession ??= this.api
       .get("/api/auth/me", { validateStatus: acceptAnyStatus })
       .then(() => undefined)
       .catch((error: unknown) => {
@@ -371,7 +407,7 @@ export default class Toonkotsu implements Delegate {
   private getReaderSession(chapterId: string): Promise<ReaderSession> {
     this.readerSession ??= (async () => {
       await this.ensureSiteSession();
-      const result = await this.client.get("/api/manga/key", {
+      const result = await this.api.get("/api/manga/key", {
         validateStatus: acceptAnyStatus,
       });
       if (!result.ok) {

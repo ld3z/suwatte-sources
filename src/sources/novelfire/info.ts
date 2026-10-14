@@ -8,5 +8,5 @@ export const info: SourceInfo = {
   website: BASE_URL,
   languages: ["en"],
   rating: ContentRating.MATURE,
-  thumbnail: "novelfire.png",
+  thumbnail: "novelfire.jxl",
 };

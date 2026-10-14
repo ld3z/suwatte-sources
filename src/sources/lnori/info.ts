@@ -8,5 +8,5 @@ export const info: SourceInfo = {
   website: BASE_URL,
   languages: ["en"],
   rating: ContentRating.SUGGESTIVE,
-  thumbnail: "lnori.png",
+  thumbnail: "lnori.jxl",
 };

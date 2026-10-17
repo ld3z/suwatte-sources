@@ -3,12 +3,13 @@ import { PagedItemList, SearchRequest } from "@suwatte/toolchain";
 import { BROWSE_LIMIT, DEFAULT_SORT } from "./constants";
 import { toItem } from "./parsers";
 import { Preferences } from "./settings";
-import { ChikariNovelListResponse } from "./types";
+import { ChikariSeriesListResponse } from "./types";
 import { buildQueryString, excludedIds, parseInteger, selectedIds } from "./utils";
 
 export interface ListOptions {
   sort: string;
   query?: string;
+  types?: string[];
   genres?: string[];
   excludedGenres?: string[];
   tags?: string[];
@@ -18,7 +19,7 @@ export interface ListOptions {
 }
 
 /**
- * Builds a `/api/novels` path. `adult=true` returns only NSFW novels and
+ * Builds a `/api/series` path. `adult=true` returns only NSFW series and
  * omitting it returns only SFW ones, which is what Adult Mode relies on.
  */
 export function buildListPath(
@@ -35,6 +36,7 @@ export function buildListPath(
     sort: options.sort,
     q: options.query?.trim() || undefined,
     adult: prefs.showAdult ? "true" : undefined,
+    type: options.types?.length ? options.types : prefs.contentTypes,
     genre: options.genres,
     genre_exclude: [...excludedGenres],
     tag: options.tags,
@@ -44,7 +46,7 @@ export function buildListPath(
     limit: BROWSE_LIMIT,
     offset: (page - 1) * BROWSE_LIMIT,
   });
-  return `/api/novels?${query}`;
+  return `/api/series?${query}`;
 }
 
 /** Search uses the same list endpoint so filters, sorting, and paging all apply. */
@@ -58,6 +60,7 @@ export function buildSearchPath(
     {
       sort: request.sort?.key || DEFAULT_SORT,
       query: request.query,
+      types: selectedIds(filters.types),
       genres: selectedIds(filters.genres),
       excludedGenres: excludedIds(filters.genres),
       tags: selectedIds(filters.tags),
@@ -71,7 +74,7 @@ export function buildSearchPath(
 }
 
 export function parseListResponse(
-  data: ChikariNovelListResponse,
+  data: ChikariSeriesListResponse,
   page: number
 ): PagedItemList {
   const items = (data.items ?? []).map(toItem);

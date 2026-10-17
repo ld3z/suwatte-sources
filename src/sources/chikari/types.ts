@@ -1,7 +1,8 @@
-export interface ChikariNovelItem {
+export interface ChikariSeriesItem {
   id: number;
   slug: string;
   title: string;
+  type?: string;
   status?: string;
   is_nsfw?: boolean;
   chapter_count?: number;
@@ -13,8 +14,8 @@ export interface ChikariNovelItem {
   views?: number;
 }
 
-export interface ChikariNovelListResponse {
-  items: ChikariNovelItem[];
+export interface ChikariSeriesListResponse {
+  items: ChikariSeriesItem[];
   total: number;
   limit: number;
   offset: number;
@@ -39,13 +40,26 @@ export interface ChikariAuthor {
   role?: string;
 }
 
-export interface ChikariNovel extends ChikariNovelItem {
+export interface ChikariSeries extends ChikariSeriesItem {
   description?: string;
   year?: number | null;
+  banner_url?: string | null;
+  /** `strip` for long-strip titles; anything else is paged. */
+  reading_mode?: string;
   genres?: ChikariGenre[];
   tags?: ChikariTag[];
   authors?: ChikariAuthor[];
   alt_titles?: string[] | null;
+  anilist_id?: number | null;
+  mal_id?: number | null;
+  kitsu_id?: number | null;
+  mangaupdates_id?: string | null;
+}
+
+export interface ChikariScan {
+  slug: string;
+  name: string;
+  created_at?: string;
 }
 
 export interface ChikariChapter {
@@ -54,6 +68,8 @@ export interface ChikariChapter {
   title?: string;
   lang?: string;
   created_at?: string;
+  /** Scan groups that uploaded this chapter; empty for the site's own uploads. */
+  scans?: ChikariScan[];
 }
 
 export interface ChikariChapterListResponse {
@@ -61,10 +77,15 @@ export interface ChikariChapterListResponse {
   total: number;
   limit: number;
   offset: number;
+  scan_groups?: ChikariScan[];
 }
 
-export interface ChikariChapterRead extends ChikariChapter {
-  body?: string;
-  locked?: boolean;
-  lock_reason?: string | null;
+export interface ChikariChapterRead {
+  number: number;
+  title?: string;
+  pages?: string[];
+  scan?: string;
+  scan_name?: string;
+  /** True when the requested scan group was missing and another was returned. */
+  scan_fallback?: boolean;
 }

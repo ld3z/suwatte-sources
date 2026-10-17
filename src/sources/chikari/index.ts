@@ -2,6 +2,7 @@
 
 import {
   Chapter,
+  ChapterPage,
   ChapterUnavailableError,
   Content,
   Delegate,
@@ -13,8 +14,6 @@ import {
   SearchRequest,
   SelectFilter,
   SortOptions,
-  SourceChapterText,
-  SourceChapterTextFormat,
   SourceConfiguration,
   SourceInfo,
   TextFilter,
@@ -28,12 +27,13 @@ import {
   GENRE_OPTIONS,
   SORT_OPTIONS,
   STATUS_OPTIONS,
+  TYPE_OPTIONS,
 } from "./constants";
 import { info } from "./info";
 import {
-  novelUrl,
+  parseChapterId,
   parseDeepLinkSlug,
-  toChapterHtml,
+  seriesUrl,
   toChapters,
   toContent,
 } from "./parsers";
@@ -43,10 +43,11 @@ import {
   ChikariChapterListResponse,
   ChikariChapterRead,
   ChikariGenre,
-  ChikariNovel,
-  ChikariNovelListResponse,
+  ChikariSeries,
+  ChikariSeriesListResponse,
   ChikariTag,
 } from "./types";
+import { buildQueryString } from "./utils";
 
 export default class Chikari implements Delegate {
   static info: SourceInfo = info;
@@ -99,7 +100,7 @@ export default class Chikari implements Delegate {
       prefs
     );
     const response = await this.client.get(path);
-    return parseListResponse(await response.json<ChikariNovelListResponse>(), page);
+    return parseListResponse(await response.json<ChikariSeriesListResponse>(), page);
   }
 
   // =============================== Search ===============================
@@ -117,23 +118,24 @@ export default class Chikari implements Delegate {
     }
 
     const [genreOptions, tagOptions] = await Promise.all([
-      this.fetchOptions<ChikariGenre>("/api/novels/genres", (g) => ({
+      this.fetchOptions<ChikariGenre>("/api/genres", (g) => ({
         id: g.slug,
         title: g.name,
       })),
-      this.fetchOptions<ChikariTag>("/api/novels/tags", (t) => ({
+      this.fetchOptions<ChikariTag>("/api/tags", (t) => ({
         id: String(t.id),
         title: t.name,
       })),
     ]);
 
     const filters = [
+      SearchFilter("types", "Type", SelectFilter(TYPE_OPTIONS, false)),
       SearchFilter("genres", "Genres", SelectFilter(genreOptions ?? GENRE_OPTIONS, true)),
       SearchFilter("status", "Status", SelectFilter(STATUS_OPTIONS, false)),
       SearchFilter("min_chapters", "Minimum Chapters", TextFilter()),
     ];
     if (tagOptions) {
-      filters.splice(1, 0, SearchFilter("tags", "Tags", SelectFilter(tagOptions, true)));
+      filters.splice(2, 0, SearchFilter("tags", "Tags", SelectFilter(tagOptions, true)));
     }
 
     this.cachedFilters = filters;
@@ -154,7 +156,7 @@ export default class Chikari implements Delegate {
               id: deepLinkSlug,
               title: content.title,
               coverImage: content.coverImage,
-              webUrl: novelUrl(deepLinkSlug),
+              webUrl: seriesUrl(deepLinkSlug),
               rating: content.rating,
             },
           ],
@@ -167,14 +169,14 @@ export default class Chikari implements Delegate {
 
     const prefs = await loadPreferences();
     const response = await this.client.get(buildSearchPath(request, page, prefs));
-    return parseListResponse(await response.json<ChikariNovelListResponse>(), page);
+    return parseListResponse(await response.json<ChikariSeriesListResponse>(), page);
   }
 
   // =========================== Content Details ============================
 
   async getContent(contentId: string): Promise<Content> {
-    const response = await this.client.get(`/api/novels/${contentId}`);
-    return toContent(await response.json<ChikariNovel>());
+    const response = await this.client.get(`/api/series/${contentId}`);
+    return toContent(await response.json<ChikariSeries>());
   }
 
   // =============================== Chapters ===============================
@@ -183,7 +185,7 @@ export default class Chikari implements Delegate {
   async getChapters(contentId: string): Promise<Chapter[]> {
     const fetchPage = async (offset: number) => {
       const response = await this.client.get(
-        `/api/novels/${contentId}/chapters?limit=${CHAPTER_PAGE_LIMIT}&offset=${offset}`
+        `/api/series/${contentId}/chapters?limit=${CHAPTER_PAGE_LIMIT}&offset=${offset}`
       );
       return response.json<ChikariChapterListResponse>();
     };
@@ -200,32 +202,22 @@ export default class Chikari implements Delegate {
     return toChapters(rawChapters, contentId);
   }
 
-  // ============================= Chapter Text =============================
-
-  async getChapterText(
+  async getChapterPages(
     contentId: string,
     chapterId: string
-  ): Promise<SourceChapterText> {
+  ): Promise<ChapterPage[]> {
+    const { number, scan } = parseChapterId(chapterId);
+    const query = buildQueryString({ scan });
     const response = await this.client.get(
-      `/api/novels/${contentId}/chapters/${chapterId}/read`
+      `/api/series/${contentId}/chapters/${number}${query ? `?${query}` : ""}`
     );
     const chapter = await response.json<ChikariChapterRead>();
 
-    if (chapter.locked) {
-      throw new ChapterUnavailableError(
-        chapter.lock_reason || "This chapter is locked on chikari.moe"
-      );
+    const pages = chapter.pages ?? [];
+    if (pages.length === 0) {
+      throw new ChapterUnavailableError("Chapter pages unavailable");
     }
-    const body = chapter.body ? toChapterHtml(chapter.body) : "";
-    if (!body) {
-      throw new ChapterUnavailableError("Chapter text unavailable");
-    }
-
-    return {
-      format: SourceChapterTextFormat.HTML,
-      body,
-      resources: [],
-    };
+    return pages.map((url) => ({ url }));
   }
 
   // =============================== Settings ===============================

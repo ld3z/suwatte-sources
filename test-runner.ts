@@ -412,39 +412,67 @@ async function main() {
     console.log("\n0. Testing preference query building...");
     const chikariPrefs: ChikariPreferences = {
       showAdult: false,
-      excludedGenres: ["romance"],
-      excludeGenresInSearch: false,
+      maxContentRating: "suggestive",
       contentTypes: ["manga"],
-      maxContentRating: "Erotica",
-      minChapters: 10,
-      hiddenKeywords: ["isekai"],
+      excludedGenres: ["romance"],
+      excludedTags: ["12", "34"],
     };
-    const chikariBrowse = buildListPath({ sort: "popular", browse: true }, 1, chikariPrefs);
-    const chikariSearchPath = buildListPath({ sort: "popular" }, 1, chikariPrefs);
-    if (!chikariBrowse.includes("genre_exclude=romance") || !chikariBrowse.includes("min_chapters=10")) {
-      throw new Error("Expected Chikari browse to apply excluded genres and minimum chapters");
+    const chikariBrowse = buildListPath({ sort: "popular" }, 1, chikariPrefs);
+    if (
+      !chikariBrowse.includes("content_rating=safe%2Csuggestive") ||
+      !chikariBrowse.includes("type=manga") ||
+      !chikariBrowse.includes("genre_exclude=romance") ||
+      !chikariBrowse.includes("tag_exclude=12") ||
+      !chikariBrowse.includes("adult=false")
+    ) {
+      throw new Error("Expected Chikari browse to send the website's content prefs");
     }
-    if (chikariSearchPath.includes("genre_exclude=romance")) {
-      throw new Error("Expected excluded genres to stay off search until the setting is enabled");
+    const chikariSearchPath = buildListPath(
+      {
+        sort: "popular",
+        genres: ["action"],
+        minChapters: 10,
+        tags: ["56"],
+      },
+      1,
+      chikariPrefs
+    );
+    if (!chikariSearchPath.includes("genre_exclude=romance")) {
+      throw new Error("Expected Chikari search to apply excluded genres like the website");
     }
-    if (!chikariSearchPath.includes("genre_exclude=adult") || !chikariSearchPath.includes("min_chapters=10")) {
-      throw new Error("Expected Chikari search to keep the content-rating cap and minimum chapters");
+    if (!chikariSearchPath.includes("min_chapters=10")) {
+      throw new Error("Expected Chikari search to pass the minimum chapters filter");
+    }
+    if (chikariSearchPath.includes("tag_exclude=56")) {
+      throw new Error("Expected tags included by the search filter to stay out of tag exclusions");
+    }
+    const chikariAdultPath = buildListPath({ sort: "popular" }, 1, {
+      ...chikariPrefs,
+      showAdult: true,
+    });
+    if (
+      !chikariAdultPath.includes("adult=true") ||
+      chikariAdultPath.includes("content_rating") ||
+      chikariAdultPath.includes("genre_exclude") ||
+      chikariAdultPath.includes("tag_exclude") ||
+      chikariAdultPath.includes("type=manhua")
+    ) {
+      throw new Error("Expected Adult Mode to request adult content without content prefs");
     }
 
     const chikariComics = wrapDelegateWithValidation(emulate(Chikari), "Chikari");
     await chikariComics.onFormSubmitted("reset", {
       pref_18_mode: false,
-      pref_exclude_genres: { include: [], exclude: [] },
-      pref_exclude_genres_in_search: false,
       pref_content_types: { include: ["manga", "manhwa", "manhua"], exclude: [] },
-      pref_max_content_rating: "Erotica",
-      pref_min_chapters: 0,
-      pref_hidden_keywords: "",
+      pref_max_content_rating: "suggestive",
+      pref_exclude_genres: { include: [], exclude: [] },
+      pref_excluded_tags: { include: [], exclude: [] },
     });
-    const comicSettings = await chikariComics.getSettingsPage();
-    if (comicSettings.sections.length !== 2) {
+    const chikariSettings = await chikariComics.getSettingsPage();
+    if (chikariSettings.sections.length !== 2) {
       throw new Error("Expected Chikari settings to have content and advanced sections");
     }
+    console.log("Settings controls:", chikariSettings.sections[0].views.map((v) => v.id).filter(Boolean));
 
     console.log("\n1. Testing getHomePage & getItemList...");
     const comicsHome = await chikariComics.getHomePage();

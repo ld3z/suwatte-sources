@@ -34,12 +34,3 @@ export function excludedIds(value: unknown): string[] {
 export function nonEmpty<T>(values: T[]): T[] | undefined {
   return values.length > 0 ? values : undefined;
 }
-
-export function matchesHiddenKeyword(
-  item: { title?: string },
-  keywords: string[]
-): boolean {
-  if (keywords.length === 0) return false;
-  const title = item.title?.toLowerCase() ?? "";
-  return keywords.some((k) => title.includes(k));
-}

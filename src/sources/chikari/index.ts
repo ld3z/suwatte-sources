@@ -98,17 +98,12 @@ export default class Chikari implements Delegate {
       {
         sort: feed.sort,
         statuses: feed.status ? [feed.status] : undefined,
-        browse: true,
       },
       page,
       prefs
     );
     const response = await this.client.get(path);
-    return parseListResponse(
-      await response.json<ChikariSeriesListResponse>(),
-      page,
-      prefs.hiddenKeywords
-    );
+    return parseListResponse(await response.json<ChikariSeriesListResponse>(), page);
   }
 
   // =============================== Search ===============================
@@ -177,11 +172,7 @@ export default class Chikari implements Delegate {
 
     const prefs = await loadPreferences();
     const response = await this.client.get(buildSearchPath(request, page, prefs));
-    return parseListResponse(
-      await response.json<ChikariSeriesListResponse>(),
-      page,
-      prefs.hiddenKeywords
-    );
+    return parseListResponse(await response.json<ChikariSeriesListResponse>(), page);
   }
 
   // =========================== Content Details ============================
@@ -235,7 +226,15 @@ export default class Chikari implements Delegate {
   // =============================== Settings ===============================
 
   async getSettingsPage(): Promise<UIForm> {
-    return buildSettingsForm(await loadPreferences());
+    const [prefs, tagOptions] = await Promise.all([
+      loadPreferences(),
+      // Live tag vocabulary for the Excluded Tags control, like the website's own UI.
+      this.fetchOptions<ChikariTag>("/api/tags", (t) => ({
+        id: String(t.id),
+        title: t.name,
+      })),
+    ]);
+    return buildSettingsForm(prefs, tagOptions);
   }
 
   async onFormSubmitted(_id: string, data: any): Promise<void> {

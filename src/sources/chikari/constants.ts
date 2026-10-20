@@ -7,11 +7,9 @@ export const CHAPTER_PAGE_LIMIT = 500;
 
 export const PREF_SHOW_18 = "pref_18_mode";
 export const PREF_EXCLUDE_GENRES = "pref_exclude_genres";
-export const PREF_EXCLUDE_GENRES_IN_SEARCH = "pref_exclude_genres_in_search";
-export const PREF_CONTENT_TYPES = "pref_content_types";
+export const PREF_EXCLUDED_TAGS = "pref_excluded_tags";
 export const PREF_MAX_CONTENT_RATING = "pref_max_content_rating";
-export const PREF_MIN_CHAPTERS = "pref_min_chapters";
-export const PREF_HIDDEN_KEYWORDS = "pref_hidden_keywords";
+export const PREF_CONTENT_TYPES = "pref_content_types";
 
 /** Fallback genres; the live list comes from `/api/genres`. */
 export const GENRE_OPTIONS: LabeledOption[] = [
@@ -70,23 +68,15 @@ export const TYPE_OPTIONS: LabeledOption[] = [
 /** The site's own default; OEL is opt-in. */
 export const DEFAULT_CONTENT_TYPES = ["manga", "manhwa", "manhua"];
 
+/** Rating tiers, named as the site's API expects in `content_rating`. */
 export const CONTENT_RATING_OPTIONS: LabeledOption[] = [
-  { id: "Safe", title: "Safe" },
-  { id: "Suggestive", title: "Suggestive" },
-  { id: "Erotica", title: "Erotica" },
-  { id: "Pornographic", title: "Pornographic" },
+  { id: "safe", title: "Safe" },
+  { id: "suggestive", title: "Suggestive" },
+  { id: "erotica", title: "Erotica" },
+  { id: "pornographic", title: "Pornographic" },
 ];
-export const DEFAULT_MAX_CONTENT_RATING = "Erotica";
-
-/**
- * Genres that sit above each rating. Anything above the chosen maximum is
- * sent as `genre_exclude`; the list endpoint has no content-rating field.
- */
-export const GENRES_ABOVE_RATING: Record<string, string[]> = {
-  Suggestive: ["ecchi"],
-  Erotica: ["mature", "erotica"],
-  Pornographic: ["adult", "smut", "lolicon", "shotacon"],
-};
+/** What the website shows by default: Safe + Suggestive. */
+export const DEFAULT_MAX_CONTENT_RATING = "suggestive";
 
 export const STATUS_OPTIONS: LabeledOption[] = [
   { id: "releasing", title: "Releasing" },

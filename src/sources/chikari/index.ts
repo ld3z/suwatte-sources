@@ -95,12 +95,20 @@ export default class Chikari implements Delegate {
     const prefs = await loadPreferences();
     const feed = FEEDS.find((f) => f.id === request.key) ?? FEEDS[0];
     const path = buildListPath(
-      { sort: feed.sort, statuses: feed.status ? [feed.status] : undefined },
+      {
+        sort: feed.sort,
+        statuses: feed.status ? [feed.status] : undefined,
+        browse: true,
+      },
       page,
       prefs
     );
     const response = await this.client.get(path);
-    return parseListResponse(await response.json<ChikariSeriesListResponse>(), page);
+    return parseListResponse(
+      await response.json<ChikariSeriesListResponse>(),
+      page,
+      prefs.hiddenKeywords
+    );
   }
 
   // =============================== Search ===============================
@@ -169,7 +177,11 @@ export default class Chikari implements Delegate {
 
     const prefs = await loadPreferences();
     const response = await this.client.get(buildSearchPath(request, page, prefs));
-    return parseListResponse(await response.json<ChikariSeriesListResponse>(), page);
+    return parseListResponse(
+      await response.json<ChikariSeriesListResponse>(),
+      page,
+      prefs.hiddenKeywords
+    );
   }
 
   // =========================== Content Details ============================

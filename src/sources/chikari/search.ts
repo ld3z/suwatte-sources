@@ -1,10 +1,16 @@
 import { PagedItemList, SearchRequest } from "@suwatte/toolchain";
 
-import { BROWSE_LIMIT, DEFAULT_SORT } from "./constants";
+import { BROWSE_LIMIT, DEFAULT_CONTENT_TYPES, DEFAULT_SORT } from "./constants";
 import { toItem } from "./parsers";
-import { Preferences } from "./settings";
+import { excludedRatingGenres, Preferences } from "./settings";
 import { ChikariSeriesListResponse } from "./types";
-import { buildQueryString, excludedIds, parseInteger, selectedIds } from "./utils";
+import {
+  buildQueryString,
+  excludedIds,
+  matchesHiddenKeyword,
+  parseInteger,
+  selectedIds,
+} from "./utils";
 
 export interface ListOptions {
   sort: string;
@@ -16,6 +22,8 @@ export interface ListOptions {
   excludedTags?: string[];
   statuses?: string[];
   minChapters?: number | null;
+  /** When true, browse defaults apply: excluded genres and default content types. */
+  browse?: boolean;
 }
 
 /**
@@ -27,22 +35,36 @@ export function buildListPath(
   page: number,
   prefs: Preferences
 ): string {
-  const excludedGenres = new Set([
-    ...(options.excludedGenres ?? []),
-    ...prefs.excludedGenres.filter((id) => !(options.genres ?? []).includes(id)),
-  ]);
+  const includedGenres = options.genres ?? [];
+  const excludedGenres = new Set(options.excludedGenres ?? []);
+  if (options.browse || prefs.excludeGenresInSearch) {
+    prefs.excludedGenres
+      .filter((id) => !includedGenres.includes(id))
+      .forEach((id) => excludedGenres.add(id));
+  }
+  excludedRatingGenres(prefs.maxContentRating)
+    .filter((id) => !includedGenres.includes(id))
+    .forEach((id) => excludedGenres.add(id));
+
+  const requestedTypes = options.types ?? [];
+  const types = requestedTypes.length
+    ? requestedTypes
+    : options.browse
+      ? (prefs.contentTypes ?? DEFAULT_CONTENT_TYPES)
+      : prefs.contentTypes;
+  const minChapters = options.minChapters ?? prefs.minChapters;
 
   const query = buildQueryString({
     sort: options.sort,
     q: options.query?.trim() || undefined,
     adult: prefs.showAdult ? "true" : undefined,
-    type: options.types?.length ? options.types : prefs.contentTypes,
+    type: types && types.length > 0 ? types : undefined,
     genre: options.genres,
     genre_exclude: [...excludedGenres],
     tag: options.tags,
     tag_exclude: options.excludedTags,
     status: options.statuses,
-    min_chapters: options.minChapters && options.minChapters > 0 ? options.minChapters : undefined,
+    min_chapters: minChapters > 0 ? minChapters : undefined,
     limit: BROWSE_LIMIT,
     offset: (page - 1) * BROWSE_LIMIT,
   });
@@ -75,15 +97,19 @@ export function buildSearchPath(
 
 export function parseListResponse(
   data: ChikariSeriesListResponse,
-  page: number
+  page: number,
+  hiddenKeywords: string[] = []
 ): PagedItemList {
-  const items = (data.items ?? []).map(toItem);
+  const rawItems = data.items ?? [];
+  const items = rawItems
+    .filter((item) => !matchesHiddenKeyword(item, hiddenKeywords))
+    .map(toItem);
   const total = typeof data.total === "number" ? data.total : undefined;
   return {
     items,
     total,
     isLastPage:
-      items.length < BROWSE_LIMIT ||
+      rawItems.length < BROWSE_LIMIT ||
       (total !== undefined && page * BROWSE_LIMIT >= total),
   };
 }

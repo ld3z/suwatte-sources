@@ -1,10 +1,24 @@
-import { UIForm, UISelect, UIToggle } from "@suwatte/toolchain";
+import {
+  UIForm,
+  UIPicker,
+  UISelect,
+  UIStepper,
+  UITextField,
+  UIToggle,
+} from "@suwatte/toolchain";
 
 import {
+  CONTENT_RATING_OPTIONS,
   DEFAULT_CONTENT_TYPES,
+  DEFAULT_MAX_CONTENT_RATING,
   GENRE_OPTIONS,
+  GENRES_ABOVE_RATING,
   PREF_CONTENT_TYPES,
   PREF_EXCLUDE_GENRES,
+  PREF_EXCLUDE_GENRES_IN_SEARCH,
+  PREF_HIDDEN_KEYWORDS,
+  PREF_MAX_CONTENT_RATING,
+  PREF_MIN_CHAPTERS,
   PREF_SHOW_18,
   TYPE_OPTIONS,
 } from "./constants";
@@ -12,25 +26,56 @@ import { selectedIds } from "./utils";
 
 export interface Preferences {
   showAdult: boolean;
-  /** Genre slugs hidden from browse feeds and search. */
+  /** Genre slugs hidden from browse feeds (and from search when `excludeGenresInSearch` is on). */
   excludedGenres: string[];
-  /** Comic types shown in browse feeds and search (unless a search picks its own). */
-  contentTypes: string[];
+  excludeGenresInSearch: boolean;
+  /** null means the user hasn't picked any types. */
+  contentTypes: string[] | null;
+  maxContentRating: string;
+  minChapters: number;
+  /** Lowercased, trimmed, non-empty keywords. */
+  hiddenKeywords: string[];
 }
 
 export async function loadPreferences(): Promise<Preferences> {
-  const [showAdult, excludedGenres, contentTypes] = await Promise.all([
+  const [
+    showAdult,
+    excludedGenres,
+    excludeGenresInSearch,
+    contentTypes,
+    maxContentRating,
+    minChapters,
+    hiddenKeywords,
+  ] = await Promise.all([
     ObjectStore.boolean(PREF_SHOW_18),
     ObjectStore.stringArray(PREF_EXCLUDE_GENRES),
+    ObjectStore.boolean(PREF_EXCLUDE_GENRES_IN_SEARCH),
     ObjectStore.stringArray(PREF_CONTENT_TYPES),
+    ObjectStore.string(PREF_MAX_CONTENT_RATING),
+    ObjectStore.number(PREF_MIN_CHAPTERS),
+    ObjectStore.string(PREF_HIDDEN_KEYWORDS),
   ]);
 
   return {
     showAdult: showAdult ?? false,
     excludedGenres: excludedGenres ?? [],
-    contentTypes:
-      contentTypes && contentTypes.length > 0 ? contentTypes : DEFAULT_CONTENT_TYPES,
+    excludeGenresInSearch: excludeGenresInSearch ?? false,
+    contentTypes: contentTypes && contentTypes.length > 0 ? contentTypes : null,
+    maxContentRating: maxContentRating ?? DEFAULT_MAX_CONTENT_RATING,
+    minChapters: minChapters ?? 0,
+    hiddenKeywords: (hiddenKeywords ?? "")
+      .split(",")
+      .map((k) => k.trim().toLowerCase())
+      .filter((k) => k.length > 0),
   };
+}
+
+/** Genre slugs that belong to ratings above the chosen maximum. */
+export function excludedRatingGenres(maxContentRating: string): string[] {
+  const ratings = CONTENT_RATING_OPTIONS.map((o) => o.id);
+  const maxIndex = ratings.indexOf(maxContentRating);
+  if (maxIndex < 0) return [];
+  return ratings.slice(maxIndex + 1).flatMap((id) => GENRES_ABOVE_RATING[id] ?? []);
 }
 
 export function buildSettingsForm(prefs: Preferences): UIForm {
@@ -39,7 +84,7 @@ export function buildSettingsForm(prefs: Preferences): UIForm {
       {
         header: "Content Preferences",
         footer:
-          "Adult Mode shows only 18+ titles. Turn it off to see non-adult titles. Content types and excluded genres apply to browse feeds and search; a search's own type filter overrides the content types.",
+          "Adult Mode shows only 18+ titles. Turn it off to see non-adult titles.",
         views: [
           UIToggle({
             id: PREF_SHOW_18,
@@ -48,20 +93,59 @@ export function buildSettingsForm(prefs: Preferences): UIForm {
             currentValue: prefs.showAdult,
           }),
           UISelect({
+            id: PREF_EXCLUDE_GENRES,
+            title: "Exclude Genres from Browse",
+            options: GENRE_OPTIONS,
+            exclude: false,
+            defaultValue: { include: [], exclude: [] },
+            currentValue: { include: prefs.excludedGenres, exclude: [] },
+          }),
+        ],
+      },
+      {
+        header: "Advanced Settings",
+        footer:
+          "Content types, minimum chapters, and hidden keywords apply to both browse feeds and search. Content rating applies to both. Filters chosen in a search override these defaults.",
+        views: [
+          UISelect({
             id: PREF_CONTENT_TYPES,
             title: "Content Types",
             options: TYPE_OPTIONS,
             exclude: false,
             defaultValue: { include: DEFAULT_CONTENT_TYPES, exclude: [] },
-            currentValue: { include: prefs.contentTypes, exclude: [] },
+            currentValue: {
+              include: prefs.contentTypes ?? DEFAULT_CONTENT_TYPES,
+              exclude: [],
+            },
           }),
-          UISelect({
-            id: PREF_EXCLUDE_GENRES,
-            title: "Exclude Genres",
-            options: GENRE_OPTIONS,
-            exclude: false,
-            defaultValue: { include: [], exclude: [] },
-            currentValue: { include: prefs.excludedGenres, exclude: [] },
+          UIPicker({
+            id: PREF_MAX_CONTENT_RATING,
+            title: "Maximum Content Rating",
+            options: CONTENT_RATING_OPTIONS,
+            defaultValue: DEFAULT_MAX_CONTENT_RATING,
+            currentValue: prefs.maxContentRating,
+          }),
+          UIStepper({
+            id: PREF_MIN_CHAPTERS,
+            title: "Minimum Chapters",
+            lowerBound: 0,
+            upperBound: 1000,
+            step: 5,
+            defaultValue: 0,
+            currentValue: prefs.minChapters,
+          }),
+          UIToggle({
+            id: PREF_EXCLUDE_GENRES_IN_SEARCH,
+            title: "Apply Excluded Genres to Search",
+            defaultValue: false,
+            currentValue: prefs.excludeGenresInSearch,
+          }),
+          UITextField({
+            id: PREF_HIDDEN_KEYWORDS,
+            title: "Hide Titles Containing",
+            placeholder: "Comma-separated, e.g. isekai, reincarnated",
+            defaultValue: "",
+            currentValue: prefs.hiddenKeywords.join(", "),
           }),
         ],
       },
@@ -71,13 +155,30 @@ export function buildSettingsForm(prefs: Preferences): UIForm {
 
 /** Saves each submitted value that has the expected type; others are ignored. */
 export async function savePreferences(data: Record<string, unknown>): Promise<void> {
-  if (typeof data[PREF_SHOW_18] === "boolean") {
-    await ObjectStore.set(PREF_SHOW_18, data[PREF_SHOW_18]);
-  }
-  if (data[PREF_EXCLUDE_GENRES] && typeof data[PREF_EXCLUDE_GENRES] === "object") {
-    await ObjectStore.set(PREF_EXCLUDE_GENRES, selectedIds(data[PREF_EXCLUDE_GENRES]));
-  }
-  if (data[PREF_CONTENT_TYPES] && typeof data[PREF_CONTENT_TYPES] === "object") {
-    await ObjectStore.set(PREF_CONTENT_TYPES, selectedIds(data[PREF_CONTENT_TYPES]));
+  const boolean = (key: string) =>
+    typeof data[key] === "boolean" ? (data[key] as boolean) : undefined;
+  const string = (key: string) =>
+    typeof data[key] === "string" ? (data[key] as string) : undefined;
+  const selection = (key: string) =>
+    data[key] && typeof data[key] === "object" ? selectedIds(data[key]) : undefined;
+  const wholeNumber = (key: string) =>
+    typeof data[key] === "number"
+      ? Math.max(0, Math.floor(data[key] as number))
+      : undefined;
+
+  const updates: [string, unknown][] = [
+    [PREF_SHOW_18, boolean(PREF_SHOW_18)],
+    [PREF_EXCLUDE_GENRES, selection(PREF_EXCLUDE_GENRES)],
+    [PREF_CONTENT_TYPES, selection(PREF_CONTENT_TYPES)],
+    [PREF_MAX_CONTENT_RATING, string(PREF_MAX_CONTENT_RATING)],
+    [PREF_MIN_CHAPTERS, wholeNumber(PREF_MIN_CHAPTERS)],
+    [PREF_EXCLUDE_GENRES_IN_SEARCH, boolean(PREF_EXCLUDE_GENRES_IN_SEARCH)],
+    [PREF_HIDDEN_KEYWORDS, string(PREF_HIDDEN_KEYWORDS)],
+  ];
+
+  for (const [key, value] of updates) {
+    if (value !== undefined) {
+      await ObjectStore.set(key, value);
+    }
   }
 }

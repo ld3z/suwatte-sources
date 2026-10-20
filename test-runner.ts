@@ -6,6 +6,8 @@ import NovelFire from "./src/sources/novelfire";
 import LNORI from "./src/sources/lnori";
 import Chikari from "./src/sources/chikari";
 import ChikariNovels from "./src/sources/chikari-novels";
+import { buildListPath } from "./src/sources/chikari/search";
+import { Preferences as ChikariPreferences } from "./src/sources/chikari/settings";
 import LunarX from "./src/sources/lunarx";
 import Madokami from "./src/sources/madokami";
 import NovelBuddy from "./src/sources/novelbuddy";
@@ -406,12 +408,43 @@ async function main() {
     console.log("\n==================================================");
     console.log("Testing Chikari (Comics)...");
     console.log("==================================================");
+
+    console.log("\n0. Testing preference query building...");
+    const chikariPrefs: ChikariPreferences = {
+      showAdult: false,
+      excludedGenres: ["romance"],
+      excludeGenresInSearch: false,
+      contentTypes: ["manga"],
+      maxContentRating: "Erotica",
+      minChapters: 10,
+      hiddenKeywords: ["isekai"],
+    };
+    const chikariBrowse = buildListPath({ sort: "popular", browse: true }, 1, chikariPrefs);
+    const chikariSearchPath = buildListPath({ sort: "popular" }, 1, chikariPrefs);
+    if (!chikariBrowse.includes("genre_exclude=romance") || !chikariBrowse.includes("min_chapters=10")) {
+      throw new Error("Expected Chikari browse to apply excluded genres and minimum chapters");
+    }
+    if (chikariSearchPath.includes("genre_exclude=romance")) {
+      throw new Error("Expected excluded genres to stay off search until the setting is enabled");
+    }
+    if (!chikariSearchPath.includes("genre_exclude=adult") || !chikariSearchPath.includes("min_chapters=10")) {
+      throw new Error("Expected Chikari search to keep the content-rating cap and minimum chapters");
+    }
+
     const chikariComics = wrapDelegateWithValidation(emulate(Chikari), "Chikari");
     await chikariComics.onFormSubmitted("reset", {
       pref_18_mode: false,
       pref_exclude_genres: { include: [], exclude: [] },
+      pref_exclude_genres_in_search: false,
       pref_content_types: { include: ["manga", "manhwa", "manhua"], exclude: [] },
+      pref_max_content_rating: "Erotica",
+      pref_min_chapters: 0,
+      pref_hidden_keywords: "",
     });
+    const comicSettings = await chikariComics.getSettingsPage();
+    if (comicSettings.sections.length !== 2) {
+      throw new Error("Expected Chikari settings to have content and advanced sections");
+    }
 
     console.log("\n1. Testing getHomePage & getItemList...");
     const comicsHome = await chikariComics.getHomePage();

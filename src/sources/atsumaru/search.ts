@@ -52,19 +52,24 @@ function buildFilterBy(request: SearchRequest, prefs: Preferences): string[] {
   const filters = (request.filters ?? {}) as Record<string, any>;
   const filterBy: string[] = ["hidden:!=true"];
 
-  // Genres: explicitly included genres win over excluded ones from settings.
+  // Genres: excluded genres are hidden everywhere; explicitly included
+  // genres win over both preference and filter exclusions.
   const includedGenres: string[] = filters.genres?.include ?? [];
   const excludedGenres = new Set<string>(filters.genres?.exclude ?? []);
-  if (prefs.excludeGenresInSearch) {
-    prefs.excludedGenres
-      .filter((id) => !includedGenres.includes(id))
-      .forEach((id) => excludedGenres.add(id));
-  }
+  prefs.excludedGenres
+    .filter((id) => !includedGenres.includes(id))
+    .forEach((id) => excludedGenres.add(id));
   if (includedGenres.length > 0) {
     filterBy.push(includedGenres.map((id) => `genreIds:=\`${id}\``).join(" && "));
   }
   if (excludedGenres.size > 0) {
     filterBy.push(`genreIds:!=[${backtickList(excludedGenres)}]`);
+  }
+
+  // Excluded tags are hidden from search as well, rather than behind the
+  // genre search toggle.
+  if (prefs.excludedTags.length > 0) {
+    filterBy.push(`tagIds:!=[${backtickList(prefs.excludedTags)}]`);
   }
 
   const requestedTypes = selectedIds(filters.types);

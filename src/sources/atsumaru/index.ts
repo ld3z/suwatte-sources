@@ -28,6 +28,7 @@ import {
   GENRE_OPTIONS,
   SORT_OPTIONS,
   STATUS_OPTIONS,
+  TAG_EXCLUSION_THRESHOLD,
   TYPE_OPTIONS,
 } from "./constants";
 import { info } from "./info";
@@ -46,6 +47,7 @@ import {
   AtsumaruMangaPageResponse,
   AtsumaruReadChapterResponse,
   AtsumaruSearchResponse,
+  AtsumaruTag,
 } from "./types";
 import { formatImageUrl, matchesHiddenKeyword } from "./utils";
 
@@ -105,10 +107,13 @@ export default class Atsumaru implements Delegate {
       `contentRatings=${allowedContentRatings(prefs.maxContentRating).join(",")}`,
     ];
     if (prefs.showAdult) params.push("adult=1");
-    if (prefs.excludedGenres.length > 0) {
-      params.push(`excludedTags=${prefs.excludedGenres.join(",")}`);
-    }
     if (feed.timeframe) params.push(`timeframe=${feed.timeframe}`);
+    // The browse endpoint excludes by tag id; site genres are tag-table ids too,
+    // so both preference groups flow through `excludedTags`.
+    const excludedTagIds = new Set([...prefs.excludedGenres, ...prefs.excludedTags]);
+    if (excludedTagIds.size > 0) {
+      params.push(`excludedTags=${[...excludedTagIds].join(",")}`);
+    }
 
     const response = await this.client.get(
       `/api/home2/${feed.endpoint}?${params.join("&")}`
@@ -250,7 +255,11 @@ export default class Atsumaru implements Delegate {
   // =============================== Settings ===============================
 
   async getSettingsPage(): Promise<UIForm> {
-    return buildSettingsForm(await loadPreferences());
+    const [prefs, tagOptions] = await Promise.all([
+      loadPreferences(),
+      this.fetchTagOptions(),
+    ]);
+    return buildSettingsForm(prefs, tagOptions);
   }
 
   async onFormSubmitted(_id: string, data: any): Promise<void> {
@@ -258,6 +267,18 @@ export default class Atsumaru implements Delegate {
   }
 
   // =============================== Helpers ===============================
+
+  /** Tag options for the Excluded Tags control, or null so the control is omitted. */
+  private async fetchTagOptions(): Promise<LabeledOption[] | null> {
+    try {
+      const response = await this.client.get("/api/explore/availableFilters");
+      const data = await response.json<AtsumaruAvailableFilters>();
+      const tagOptions = toTagOptions(data.tags ?? []);
+      return tagOptions.length > 0 ? tagOptions : null;
+    } catch {
+      return null;
+    }
+  }
 
   private async getScanlators(contentId: string): Promise<Map<string, string>> {
     const cached = this.scanlatorMapCache.get(contentId);
@@ -281,4 +302,14 @@ function toOptions(
   return entries && entries.length > 0
     ? entries.map((e) => ({ id: e.id, title: e.name }))
     : fallback;
+}
+
+/** Popular tags as options; the raw vocabulary (thousands of tags) is too large for a select. */
+function toTagOptions(tags: AtsumaruTag[]): LabeledOption[] {
+  const useCount = (t: AtsumaruTag) =>
+    (t.safeCount ?? 0) + (t.adultCount ?? 0);
+  return tags
+    .filter((t) => useCount(t) >= TAG_EXCLUSION_THRESHOLD)
+    .sort((a, b) => useCount(b) - useCount(a))
+    .map((t) => ({ id: String(t.id), title: t.name }));
 }

@@ -6,7 +6,7 @@ export const BROWSE_LIMIT = 40;
 
 export const PREF_SHOW_18 = "pref_18_mode";
 export const PREF_EXCLUDE_GENRES = "pref_exclude_genres";
-export const PREF_EXCLUDE_GENRES_IN_SEARCH = "pref_exclude_genres_in_search";
+export const PREF_EXCLUDED_TAGS = "pref_excluded_tags";
 export const PREF_CONTENT_TYPES = "pref_content_types";
 export const PREF_MAX_CONTENT_RATING = "pref_max_content_rating";
 export const PREF_MIN_CHAPTERS = "pref_min_chapters";
@@ -14,6 +14,12 @@ export const PREF_OFFICIAL_ONLY = "pref_official_only";
 export const PREF_HIDDEN_KEYWORDS = "pref_hidden_keywords";
 
 export const DEFAULT_CONTENT_TYPES = ["Manga", "Manwha", "Manhua", "OEL"];
+
+/**
+ * Tags applied to at least this many titles are offered as Excluded Tags;
+ * the full vocabulary (thousands of tags) is too large for the select.
+ */
+export const TAG_EXCLUSION_THRESHOLD = 500;
 
 export const CONTENT_RATING_OPTIONS: LabeledOption[] = [
   { id: "Safe", title: "Safe" },

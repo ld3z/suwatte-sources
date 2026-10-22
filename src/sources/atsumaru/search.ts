@@ -67,9 +67,18 @@ function buildFilterBy(request: SearchRequest, prefs: Preferences): string[] {
   }
 
   // Excluded tags are hidden from search as well, rather than behind the
-  // genre search toggle.
-  if (prefs.excludedTags.length > 0) {
-    filterBy.push(`tagIds:!=[${backtickList(prefs.excludedTags)}]`);
+  // genre search toggle. Excluded tags from the search filter are merged
+  // with the preference exclusions, and explicitly included tags win.
+  const includedTags: string[] = filters.tags?.include ?? [];
+  const excludedTags = new Set<string>(filters.tags?.exclude ?? []);
+  prefs.excludedTags
+    .filter((id) => !includedTags.includes(id))
+    .forEach((id) => excludedTags.add(id));
+  if (includedTags.length > 0) {
+    filterBy.push(`tagIds:=[${backtickList(includedTags)}]`);
+  }
+  if (excludedTags.size > 0) {
+    filterBy.push(`tagIds:!=[${backtickList(excludedTags)}]`);
   }
 
   const requestedTypes = selectedIds(filters.types);

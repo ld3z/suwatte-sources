@@ -8,6 +8,8 @@ import Chikari from "./src/sources/chikari";
 import ChikariNovels from "./src/sources/chikari-novels";
 import { buildListPath } from "./src/sources/chikari/search";
 import { Preferences as ChikariPreferences } from "./src/sources/chikari/settings";
+import { buildSearchPath as buildAtsumaruSearchPath } from "./src/sources/atsumaru/search";
+import { Preferences as AtsumaruPreferences } from "./src/sources/atsumaru/settings";
 import LunarX from "./src/sources/lunarx";
 import Madokami from "./src/sources/madokami";
 import NovelBuddy from "./src/sources/novelbuddy";
@@ -69,6 +71,38 @@ async function main() {
     console.log("\n3. Testing getSearchResults ('swordmaster')...");
     const search = await comicSource.getSearchResults({ query: "swordmaster" }, 1);
     console.log("Search hits count:", search.items.length, "total:", search.total);
+
+    console.log("\n3b. Testing tag exclusion query building...");
+    const atsumaruPrefs: AtsumaruPreferences = {
+      showAdult: false,
+      excludedGenres: ["9"],
+      excludedTags: ["12", "34"],
+      contentTypes: null,
+      maxContentRating: "Erotica",
+      minChapters: 0,
+      officialOnly: false,
+      hiddenKeywords: [],
+    };
+    const tagSearchPath = decodeURIComponent(buildAtsumaruSearchPath(
+      {
+        filters: {
+          genres: { include: ["1"], exclude: ["7"] },
+          tags: { include: ["12"], exclude: ["56"] },
+        },
+      } as any,
+      1,
+      atsumaruPrefs
+    ));
+    console.log("filter_by:", tagSearchPath);
+    if (!tagSearchPath.includes("tagIds:!=[`56`,`34`]")) {
+      throw new Error("Expected Atsumaru search to merge preference and filter tag exclusions");
+    }
+    if (!tagSearchPath.includes("tagIds:=[`12`]")) {
+      throw new Error("Expected Atsumaru search to include the tags filter selection");
+    }
+    if (!tagSearchPath.includes("genreIds:!=[`7`,`9`]") || !tagSearchPath.includes("genreIds:=`1`")) {
+      throw new Error("Expected Atsumaru search to merge preference and filter genre exclusions");
+    }
 
     const targetComicId = firstItem.id;
     console.log(`\n4. Testing getContent ('${targetComicId}')...`);

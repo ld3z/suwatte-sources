@@ -153,6 +153,7 @@ export default class Atsumaru implements Delegate {
     let genreOptions = GENRE_OPTIONS;
     let typeOptions = TYPE_OPTIONS;
     let statusOptions = STATUS_OPTIONS;
+    let tagOptions: LabeledOption[] = [];
 
     try {
       const response = await this.client.get("/api/explore/availableFilters");
@@ -163,6 +164,7 @@ export default class Atsumaru implements Delegate {
       );
       typeOptions = toOptions(data.types, typeOptions);
       statusOptions = toOptions(data.statuses, statusOptions);
+      tagOptions = toTagOptions(data.tags ?? []);
     } catch {
       // Keep the static fallback options if the request fails.
     }
@@ -175,6 +177,13 @@ export default class Atsumaru implements Delegate {
       SearchFilter("min_chapters", "Minimum Chapters", TextFilter()),
       SearchFilter("official", "Only Official Translations", ToggleFilter()),
     ];
+    if (tagOptions.length > 0) {
+      this.cachedFilters.splice(
+        1,
+        0,
+        SearchFilter("tags", "Tags", SelectFilter(tagOptions, true))
+      );
+    }
     return this.cachedFilters;
   }
 

@@ -1,14 +1,4 @@
-import { NativeCrypto } from "@suwatte/toolchain";
-
-import { READER_SECRET } from "./constants";
-import { ReaderKeyResponse } from "./types";
-
-declare const Crypto: NativeCrypto;
-
 const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
-
-const asciiBytes = (value: string): Uint8Array =>
-  Uint8Array.from(value, (c) => c.charCodeAt(0));
 
 /** Decodes base64 or base64url, with or without padding. */
 export function decodeBase64Url(value: string): Uint8Array {
@@ -45,61 +35,6 @@ export function encodeBase64Url(bytes: Uint8Array): string {
     for (let j = 0; j < length; j++) out += BASE64[(chunk >> (18 - j * 6)) & 63];
   }
   return out;
-}
-
-const xorCycle = (data: Uint8Array, mask: Uint8Array): Uint8Array =>
-  data.map((value, index) => value ^ mask[index % mask.length]);
-
-export function hmacSha256(key: Uint8Array, message: Uint8Array): Uint8Array {
-  const block = new Uint8Array(64);
-  block.set(key.length > 64 ? Crypto.sha256(key) : key);
-  const inner = new Uint8Array(64 + message.length);
-  const outer = new Uint8Array(64 + 32);
-  for (let i = 0; i < 64; i++) {
-    inner[i] = block[i] ^ 0x36;
-    outer[i] = block[i] ^ 0x5c;
-  }
-  inner.set(message, 64);
-  outer.set(Crypto.sha256(inner), 64);
-  return Crypto.sha256(outer);
-}
-
-export interface ReaderKey {
-  /** HMAC-SHA256 key that signs chapter requests and unwraps page keys. */
-  key: Uint8Array;
-  /** Server time minus local time, in milliseconds. */
-  offset: number;
-}
-
-/** The served key is masked with a digest of the reader secret. */
-export function deriveReaderKey(
-  response: ReaderKeyResponse,
-  secret = READER_SECRET
-): ReaderKey {
-  const mask = Crypto.sha256(asciiBytes(`sign:${secret}`));
-  return {
-    key: xorCycle(decodeBase64Url(response.key), mask),
-    offset: Number(response.now) - Date.now() || 0,
-  };
-}
-
-const hmac = (readerKey: ReaderKey, message: string): Uint8Array =>
-  hmacSha256(readerKey.key, asciiBytes(message));
-
-const randomBytes = (length: number): Uint8Array =>
-  Uint8Array.from({ length }, () => Math.floor(Math.random() * 256));
-
-/** Builds the `x-sig` header for a reader API path. */
-export function signReaderPath(readerKey: ReaderKey, path: string): string {
-  const time = String(Date.now() + readerKey.offset);
-  const nonce = encodeBase64Url(randomBytes(12));
-  const signature = encodeBase64Url(hmac(readerKey, `${time}.${nonce}.${path}`));
-  return `v1.${time}.${nonce}.${signature.slice(0, 32)}`;
-}
-
-/** A "v1" wrapped chapter masks each page key with an HMAC of that page's nonce. */
-export function unwrapPageKey(readerKey: ReaderKey, key: string, nonce: string): string {
-  return encodeBase64Url(xorCycle(decodeBase64Url(key), hmac(readerKey, `page.${nonce}`)));
 }
 
 // ================================ AES-CTR ================================

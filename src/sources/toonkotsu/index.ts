@@ -24,10 +24,9 @@ import {
   FeedDefinition,
   FEEDS,
   PAGE_SIZE,
-  READER_BUILD,
   SORT_OPTIONS,
 } from "./constants";
-import { decodeBase64Url, decryptPage, deriveReaderKey, ReaderKey, signReaderPath } from "./crypto";
+import { decodeBase64Url, decryptPage } from "./crypto";
 import { info } from "./info";
 import {
   PAGE_KEY,
@@ -35,7 +34,6 @@ import {
   parseChapterPages,
   parseDeepLinkId,
   parseRatingId,
-  parseReaderKeyResponse,
   parseTagGroups,
   toChapters,
   toContent,
@@ -60,7 +58,6 @@ import {
 import {
   FacetsResponse,
   LatestResponse,
-  ReaderKeyResponse,
   ReaderLimit,
   Series,
   SeriesListResponse,
@@ -74,8 +71,6 @@ const acceptAnyStatus = () => true;
 /** Content details and the chapter list are requested together; both read one series response. */
 const SERIES_CACHE_MS = 60_000;
 const SERIES_CACHE_SIZE = 8;
-
-type ReaderSession = { readerKey: ReaderKey; response: ReaderKeyResponse };
 
 export default class Toonkotsu implements Delegate {
   static info: SourceInfo = info;
@@ -102,10 +97,10 @@ export default class Toonkotsu implements Delegate {
 
   private seriesCache = new Map<string, { at: number; promise: Promise<SeriesResponse> }>();
   private facetsPromise?: Promise<FacetsResponse>;
-  private readerSession?: Promise<ReaderSession>;
   /**
-   * The reader refuses requests without the site's guest session cookie, which
-   * is only handed out by `/api/auth/me`, the call the site's pages make on load.
+   * The reader only answers requests carrying the site's guest session cookie,
+   * which is only handed out by `/api/auth/me`, the call the site's pages make
+   * on load.
    */
   private siteSession?: Promise<void>;
   /** Titles already listed in Latest Updates, so a later page does not repeat them. */
@@ -297,30 +292,20 @@ export default class Toonkotsu implements Delegate {
   }
 
   /**
-   * Chapter requests are signed with a key from `/api/manga/key`. A rejected
-   * signature usually means the key expired, so it is refreshed once.
+   * The reader serves the chapter with each page's raw AES key and nonce, and
+   * answers guest sessions directly; a reading limit is resolved on the site.
    */
   async getChapterPages(_contentId: string, chapterId: string): Promise<ChapterPage[]> {
     const path = `/api/manga/chapter/${chapterId}`;
-    for (let attempt = 0; ; attempt++) {
-      const { readerKey, response } = await this.getReaderSession(chapterId);
-      const result = await this.api.get(path, {
-        headers: { "x-sig": signReaderPath(readerKey, path) },
-        validateStatus: acceptAnyStatus,
-      });
-      if (result.ok) {
-        return parseChapterPages(await result.json(), readerKey);
-      }
-
-      const limit = result.status === 429 ? await readLimit(result) : undefined;
-      const signingRejected =
-        result.status === 401 || result.status === 403 || limit?.resign === true;
-      if (attempt === 0 && signingRejected) {
-        this.readerSession = undefined;
-        continue;
-      }
-      throw readerError(result.status, limit, chapterId, response.build !== READER_BUILD);
+    await this.ensureSiteSession();
+    const result = await this.api.get(path, {
+      validateStatus: acceptAnyStatus,
+    });
+    if (result.ok) {
+      return parseChapterPages(await result.json());
     }
+    const limit = result.status === 429 ? await readLimit(result) : undefined;
+    throw readerError(result.status, limit, chapterId);
   }
 
   // =============================== Settings ===============================
@@ -404,25 +389,6 @@ export default class Toonkotsu implements Delegate {
     return this.siteSession;
   }
 
-  private getReaderSession(chapterId: string): Promise<ReaderSession> {
-    this.readerSession ??= (async () => {
-      await this.ensureSiteSession();
-      const result = await this.api.get("/api/manga/key", {
-        validateStatus: acceptAnyStatus,
-      });
-      if (!result.ok) {
-        const limit = result.status === 429 ? await readLimit(result) : undefined;
-        throw readerError(result.status, limit, chapterId);
-      }
-      const response = parseReaderKeyResponse(await result.json());
-      return { readerKey: deriveReaderKey(response), response };
-    })().catch((error: unknown) => {
-      this.readerSession = undefined;
-      throw error;
-    });
-    return this.readerSession;
-  }
-
   /** Decrypts page images whose page context carries a key and nonce. */
   private async decryptPageResponse(response: HttpResponse): Promise<HttpResponse> {
     const key = response.request.context?.[PAGE_KEY];
@@ -456,20 +422,12 @@ async function readLimit(response: HttpResponse): Promise<ReaderLimit | undefine
  * own reader. Suwatte's reader can't open a web view, so the message points to
  * the settings button that does.
  */
-function readerError(
-  status: number,
-  limit: ReaderLimit | undefined,
-  chapterId: string,
-  readerChanged = false
-): Error {
+function readerError(status: number, limit: ReaderLimit | undefined, chapterId: string): Error {
   if (limit?.code === "manga-limit") {
     return new Error(
       `Toonkotsu wants you to confirm you're human. In Suwatte, open Toonkotsu's settings, tap "${VERIFY_BUTTON_TITLE}", open any chapter on the site and pass the check, then reopen this chapter.`
     );
   }
   const detail = limit?.error ? `: ${limit.error}` : "";
-  const reason = readerChanged
-    ? " The site's reader has been updated, so this source needs an update too."
-    : "";
-  return new Error(`Could not load chapter ${chapterId} (status ${status}${detail}).${reason}`);
+  return new Error(`Could not load chapter ${chapterId} (status ${status}${detail}).`);
 }

@@ -3,13 +3,6 @@ import { LabeledOption } from "@suwatte/toolchain";
 export const BASE_URL = "https://toonkotsu.com";
 export const PAGE_SIZE = 42;
 
-/**
- * The reader's signing secret and the build it shipped with. The key endpoint
- * reports the live build, so a mismatch names the cause when the site rotates it.
- */
-export const READER_SECRET = "NO57DoQRq7oxY3MCO5_SNw4_3vFRsUq7";
-export const READER_BUILD = "1738e5282ffc19e6";
-
 export const PREF_CONTENT_RATINGS = "pref_content_ratings";
 export const PREF_TYPES = "pref_types";
 export const PREF_HIDDEN_TAGS = "pref_hidden_tags";

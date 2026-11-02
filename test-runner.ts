@@ -23,13 +23,7 @@ import {
   parseDeepLinkId as parseYaoiMeLink,
   parseSealKey,
 } from "./src/sources/yaoime/parsers";
-import {
-  decodeBase64Url,
-  decryptPage,
-  encodeBase64Url,
-  hmacSha256,
-  signReaderPath,
-} from "./src/sources/toonkotsu/crypto";
+import { decodeBase64Url, decryptPage, encodeBase64Url } from "./src/sources/toonkotsu/crypto";
 import {
   PAGE_KEY,
   PAGE_NONCE,
@@ -38,7 +32,7 @@ import {
   toChapters as toToonkotsuChapters,
   toContent as toToonkotsuContent,
 } from "./src/sources/toonkotsu/parsers";
-import { createCipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import { parseChapterNumbers, parseDate } from "./src/sources/madokami/parsers";
 import { base64Encode, detailsPath } from "./src/sources/madokami/utils";
@@ -878,30 +872,14 @@ async function main() {
     console.log("==================================================");
     const toonkotsu = emulate(Toonkotsu);
 
-    console.log("\n1. Testing HMAC and reader signatures against node:crypto...");
-    const hmacKey = randomBytes(32);
-    const hmacMessage = Buffer.from("1700000000000.nonce./api/manga/chapter/1");
-    const expectedHmac = createHmac("sha256", hmacKey).update(hmacMessage).digest();
-    if (!Buffer.from(hmacSha256(hmacKey, hmacMessage)).equals(expectedHmac)) {
-      throw new Error("Expected HMAC-SHA256 to match node:crypto");
-    }
-    const longKey = randomBytes(100);
+    console.log("\n1. Testing base64 reader codec...");
+    const codecBytes = randomBytes(64);
+    const codecEncoded = encodeBase64Url(codecBytes);
     if (
-      !Buffer.from(hmacSha256(longKey, hmacMessage)).equals(
-        createHmac("sha256", longKey).update(hmacMessage).digest()
-      )
+      !/^[A-Za-z0-9_-]+$/.test(codecEncoded) ||
+      !Buffer.from(decodeBase64Url(codecEncoded)).equals(codecBytes)
     ) {
-      throw new Error("Expected HMAC-SHA256 to hash keys longer than a block");
-    }
-    const readerKey = { key: Uint8Array.from(hmacKey), offset: 0 };
-    const signature = signReaderPath(readerKey, "/api/manga/chapter/1");
-    const [version, time, nonce, mac] = signature.split(".");
-    const expectedMac = encodeBase64Url(
-      createHmac("sha256", hmacKey).update(`${time}.${nonce}./api/manga/chapter/1`).digest()
-    ).slice(0, 32);
-    console.log("Signature:", signature);
-    if (version !== "v1" || mac !== expectedMac || decodeBase64Url(nonce).length !== 12) {
-      throw new Error("Expected a v1 reader signature over time, nonce and path");
+      throw new Error("Expected unpadded base64url to round-trip through the reader codec");
     }
 
     console.log("\n2. Testing AES-CTR page decryption against node:crypto...");
@@ -918,27 +896,28 @@ async function main() {
       }
     }
 
-    console.log("\n3. Testing wrapped page keys and the decrypting image interceptor...");
+    console.log("\n3. Testing raw page keys and the decrypting image interceptor...");
     const pageKey = randomBytes(16);
     const pageNonce = randomBytes(12);
-    const nonceText = encodeBase64Url(pageNonce);
-    const mask = createHmac("sha256", hmacKey).update(`page.${nonceText}`).digest();
-    const wrappedKey = encodeBase64Url(pageKey.map((b, i) => b ^ mask[i % mask.length]));
-    const pages = parseChapterPages(
-      {
-        wrap: "v1",
-        chapter: { pages: [{ src: "/p/1.webp", k: wrappedKey, n: nonceText }, { src: "//cdn.x/2.png" }] },
+    const nonceText = pageNonce.toString("base64url");
+    const keyText = pageKey.toString("base64url");
+    const pages = parseChapterPages({
+      chapter: {
+        pages: [
+          { src: "/p/1.webp", k: keyText, n: nonceText, t: "image/avif" },
+          { src: "//cdn.x/2.png" },
+        ],
       },
-      readerKey
-    );
+    });
     console.log("Pages:", pages);
     if (
       pages[0].url !== "https://toonkotsu.com/p/1.webp" ||
-      pages[0].context?.[PAGE_KEY] !== encodeBase64Url(pageKey) ||
+      pages[0].context?.[PAGE_KEY] !== keyText ||
+      pages[0].context?.[PAGE_NONCE] !== nonceText ||
       pages[1].url !== "https://cdn.x/2.png" ||
       pages[1].context
     ) {
-      throw new Error("Expected unwrapped page keys and absolute page URLs");
+      throw new Error("Expected raw page keys and absolute page URLs");
     }
     const image = randomBytes(5000);
     const imageCipher = createCipheriv(

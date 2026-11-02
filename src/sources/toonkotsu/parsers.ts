@@ -18,13 +18,12 @@ import {
   TAG_GROUPS,
   UNLISTED_TAGS,
 } from "./constants";
-import { decodeBase64Url, ReaderKey, unwrapPageKey } from "./crypto";
+import { decodeBase64Url } from "./crypto";
 import {
   ChapterRelease,
   ContentRatingId,
   FacetsResponse,
   LatestResponse,
-  ReaderKeyResponse,
   Series,
   SeriesResponse,
 } from "./types";
@@ -334,44 +333,22 @@ export function toChapters({ chapters }: SeriesResponse): Chapter[] {
 
 // ================================ Reader ================================
 
-export function parseReaderKeyResponse(value: unknown): ReaderKeyResponse {
-  const data = value as Partial<ReaderKeyResponse> | null;
-  if (
-    !data ||
-    typeof data.key !== "string" ||
-    typeof data.build !== "string" ||
-    !data.build.trim() ||
-    typeof data.now !== "number" ||
-    !Number.isFinite(data.now) ||
-    data.now <= 0
-  ) {
-    throw new Error("Toonkotsu returned invalid reader session data. The source may need an update.");
-  }
-  try {
-    decodeBase64Url(data.key);
-  } catch {
-    throw new Error("Toonkotsu returned an invalid reader signing key.");
-  }
-  return { key: data.key, build: data.build, now: data.now };
-}
-
 interface ChapterPagesResponse {
   wrap?: string | null;
   chapter?: { pages?: unknown };
 }
 
 /**
- * Plain pages are returned as-is. Encrypted pages carry their (unwrapped) key
- * and nonce in the page context for the image interceptor to decrypt.
+ * Each page carries its raw AES key and nonce in the response for the image
+ * interceptor to decrypt.
  */
-export function parseChapterPages(response: unknown, readerKey: ReaderKey): ChapterPage[] {
+export function parseChapterPages(response: unknown): ChapterPage[] {
   const data = response as ChapterPagesResponse | null;
   const pages = data?.chapter?.pages;
   if (!Array.isArray(pages)) {
     throw new Error("Toonkotsu returned invalid chapter page data. The source may need an update.");
   }
-  const wrap = data?.wrap;
-  if (wrap != null && wrap !== "" && wrap !== "v1") {
+  if (data?.wrap) {
     throw new Error("Unsupported Toonkotsu reader encryption version. Please update the source.");
   }
   if (!pages.length) throw new Error("This chapter has no pages.");
@@ -396,8 +373,7 @@ export function parseChapterPages(response: unknown, readerKey: ReaderKey): Chap
         throw new Error(`Unsupported AES key length (${keyBytes.length} bytes).`);
       }
       if (decodeBase64Url(nonce).length < 8) throw new Error("The AES-CTR nonce is too short.");
-      const pageKey = wrap === "v1" ? unwrapPageKey(readerKey, key, nonce) : key;
-      return { url, context: { [PAGE_KEY]: pageKey, [PAGE_NONCE]: nonce } };
+      return { url, context: { [PAGE_KEY]: key, [PAGE_NONCE]: nonce } };
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Invalid encryption metadata.";
       throw new Error(`${label}: ${reason} The source may need an update.`);

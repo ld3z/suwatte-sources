@@ -81,12 +81,6 @@ export interface FacetsResponse {
   genres?: Facet[];
 }
 
-export interface ReaderKeyResponse {
-  key: string;
-  build: string;
-  now: number;
-}
-
 /** The body of a refused reader request, e.g. a 429 reading limit. */
 export interface ReaderLimit {
   code?: string;

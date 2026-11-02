@@ -338,9 +338,20 @@ interface ChapterPagesResponse {
   chapter?: { pages?: unknown };
 }
 
+const MIME_REGEX = /^[a-z]+\/[a-z\d.+-]+$/i;
+
+interface ScenePage {
+  src?: unknown;
+  k?: unknown;
+  n?: unknown;
+  t?: unknown;
+}
+
 /**
- * Each page carries its raw AES key and nonce in the response for the image
- * interceptor to decrypt.
+ * Each page carries its raw AES key and nonce in the response. The key and
+ * nonce travel in the page context for the image interceptor — and also in the
+ * URL query, because Suwatte's validation strips the context and the
+ * interceptor then falls back to the page URL.
  */
 export function parseChapterPages(response: unknown): ChapterPage[] {
   const data = response as ChapterPagesResponse | null;
@@ -353,14 +364,14 @@ export function parseChapterPages(response: unknown): ChapterPage[] {
   }
   if (!pages.length) throw new Error("This chapter has no pages.");
 
-  return pages.map((page: { src?: unknown; k?: unknown; n?: unknown }, index) => {
+  return pages.map((page: ScenePage, index) => {
     const label = `Toonkotsu page ${index + 1}`;
     const path = typeof page?.src === "string" ? page.src.trim() : "";
     if (!path) throw new Error(`${label} has no valid image URL.`);
     if (/\s/.test(path) || (/^[a-z][a-z\d+.-]*:/i.test(path) && !/^https?:\/\//i.test(path))) {
       throw new Error(`${label} has an invalid image URL.`);
     }
-    const url = path.startsWith("//") ? `https:${path}` : toAbsoluteUrl(path);
+    let url = path.startsWith("//") ? `https:${path}` : toAbsoluteUrl(path);
 
     const { k: key, n: nonce } = page;
     if (key == null && nonce == null) return { url };
@@ -373,6 +384,9 @@ export function parseChapterPages(response: unknown): ChapterPage[] {
         throw new Error(`Unsupported AES key length (${keyBytes.length} bytes).`);
       }
       if (decodeBase64Url(nonce).length < 8) throw new Error("The AES-CTR nonce is too short.");
+      const mime = typeof page.t === "string" && MIME_REGEX.test(page.t) ? page.t : undefined;
+      url += `?tkkey=${encodeURIComponent(key)}&tknonce=${encodeURIComponent(nonce)}`;
+      if (mime) url += `&tktype=${encodeURIComponent(mime)}`;
       return { url, context: { [PAGE_KEY]: key, [PAGE_NONCE]: nonce } };
     } catch (error) {
       const reason = error instanceof Error ? error.message : "Invalid encryption metadata.";

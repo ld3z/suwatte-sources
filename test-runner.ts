@@ -901,6 +901,7 @@ async function main() {
     const pageNonce = randomBytes(12);
     const nonceText = pageNonce.toString("base64url");
     const keyText = pageKey.toString("base64url");
+    const pageUrl = `https://toonkotsu.com/p/1.webp?tkkey=${keyText}&tknonce=${nonceText}&tktype=image%2Favif`;
     const pages = parseChapterPages({
       chapter: {
         pages: [
@@ -911,13 +912,13 @@ async function main() {
     });
     console.log("Pages:", pages);
     if (
-      pages[0].url !== "https://toonkotsu.com/p/1.webp" ||
+      pages[0].url !== pageUrl ||
       pages[0].context?.[PAGE_KEY] !== keyText ||
       pages[0].context?.[PAGE_NONCE] !== nonceText ||
       pages[1].url !== "https://cdn.x/2.png" ||
       pages[1].context
     ) {
-      throw new Error("Expected raw page keys and absolute page URLs");
+      throw new Error("Expected raw page keys in the URL and context");
     }
     const image = randomBytes(5000);
     const imageCipher = createCipheriv(
@@ -926,16 +927,29 @@ async function main() {
       Buffer.concat([pageNonce.subarray(0, 8), Buffer.alloc(8)])
     );
     const encryptedImage = Buffer.concat([imageCipher.update(image), imageCipher.final()]);
-    const server = createServer((_req, res) => res.end(encryptedImage));
+    const server = createServer(
+      (_req, res) => res.setHeader("content-type", "application/octet-stream").end(encryptedImage)
+    );
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     try {
       const port = (server.address() as { port: number }).port;
-      const imageResponse = await (toonkotsu as any).client.get(
+      // The context survives in the app's runtime.
+      const contextual = await (toonkotsu as any).client.get(
         `http://127.0.0.1:${port}/p/1.webp`,
         { context: pages[0].context }
       );
-      if (!Buffer.from(await imageResponse.bytes()).equals(image)) {
-        throw new Error("Expected the image interceptor to decrypt the page");
+      if (!Buffer.from(await contextual.bytes()).equals(image)) {
+        throw new Error("Expected the image interceptor to decrypt via the page context");
+      }
+      // Suwatte's validation strips the context; the URL alone must still work.
+      const stripped = await (toonkotsu as any).client.get(
+        `http://127.0.0.1:${port}/p/1.webp?tkkey=${keyText}&tknonce=${nonceText}&tktype=image%2Favif`
+      );
+      if (!Buffer.from(await stripped.bytes()).equals(image)) {
+        throw new Error("Expected the image interceptor to decrypt via the page URL");
+      }
+      if (stripped.headers.get("content-type") !== "image/avif") {
+        throw new Error("Expected the decrypted page to carry its media type");
       }
     } finally {
       server.close();

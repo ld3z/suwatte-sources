@@ -65,7 +65,7 @@ import {
 } from "./types";
 
 const API_PATH_REGEX = /\/(?:api|cdn\/v1)\//;
-const IMAGE_REGEX = /\.(?:avif|gif|jpe?g|png|webp)(?:[?#]|$)/i;
+const IMAGE_REGEX = /\.(?:avif|gif|jpe?g|png|webp|bin)(?:[?#]|$)/i;
 /** Lets refused reader requests through so their status and body can be inspected. */
 const acceptAnyStatus = () => true;
 /** Content details and the chapter list are requested together; both read one series response. */
@@ -389,23 +389,48 @@ export default class Toonkotsu implements Delegate {
     return this.siteSession;
   }
 
-  /** Decrypts page images whose page context carries a key and nonce. */
+  /**
+   * Decrypts page images whose URL (or page context) carries a key and nonce.
+   * The key travels in both places: the page context is the clean channel, and
+   * the URL query is the fallback for Suwatte's validation, which strips the
+   * context from `ChapterPage` results.
+   */
   private async decryptPageResponse(response: HttpResponse): Promise<HttpResponse> {
-    const key = response.request.context?.[PAGE_KEY];
-    const nonce = response.request.context?.[PAGE_NONCE];
-    if (typeof key !== "string" || typeof nonce !== "string") return response;
+    const request = response.request;
+    const key = readPageParam(request.context?.[PAGE_KEY], request.url, "tkkey");
+    const nonce = readPageParam(request.context?.[PAGE_NONCE], request.url, "tknonce");
+    if (key === undefined || nonce === undefined) return response;
     if (!response.ok) {
       throw new Error(`Could not load Toonkotsu page (status ${response.status}).`);
     }
     const body = await response.bytes();
     if (!body.length) throw new Error("Toonkotsu returned an empty page image.");
+    let decrypted: Uint8Array;
     try {
       const nonceBytes = decodeBase64Url(nonce).subarray(0, 8);
-      return response.replaceBody(decryptPage(body, decodeBase64Url(key), nonceBytes));
+      decrypted = decryptPage(body, decodeBase64Url(key), nonceBytes);
     } catch (error) {
       const reason = error instanceof Error ? `: ${error.message}` : "";
       throw new Error(`Could not decrypt Toonkotsu page${reason}`);
     }
+    // The reader serves encrypted pages as application/octet-stream; label the
+    // body with the page's media type once it is readable again.
+    const mime = readPageParam(undefined, request.url, "tktype");
+    if (mime !== undefined) {
+      return response.rebuild({ body: decrypted, headers: { "content-type": mime } });
+    }
+    return response.replaceBody(decrypted);
+  }
+}
+
+/** Reads a page-material query parameter, preferring a context value. */
+function readPageParam(fromContext: unknown, url: string, name: string): string | undefined {
+  if (typeof fromContext === "string") return fromContext;
+  const match = new RegExp(`(?:^|[?&])${name}=([^&]*)`).exec(url);
+  try {
+    return match ? decodeURIComponent(match[1]) : undefined;
+  } catch {
+    return undefined;
   }
 }
 

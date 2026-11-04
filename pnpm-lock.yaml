@@ -175,9 +175,9 @@ importers:
       domhandler:
         specifier: ^6.0.1
         version: 6.0.1
-      tsc-rs:
-        specifier: ^0.8.0
-        version: 0.8.0
+      tsrs:
+        specifier: 0.21.0-ts7.1.0-beta
+        version: 0.21.0-ts7.1.0-beta
     devDependencies:
       tsx:
         specifier: ^4.23.15
@@ -510,38 +510,48 @@ packages:
       sharp:
         optional: true
 
-  '@tsc-rs/darwin-arm64@0.8.0':
-    resolution: {integrity: sha512-1aGCULRzd7KXIFh72Ja1K+35bQ1AeW9P3F3S36MXXhp5EQCezqxeXKkL3kQ3kH+ebfI/wA2gxyus34rllF1keQ==}
+  '@tsrs/darwin-arm64@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-qBHxa+LmrNu/XYZjqLXV4qQPsHzxSI+dQTISxXuxyBaxtJVDwCwGAq9rVHKgaUX3U0bsyb8FyC1JIZFu4+EqZQ==}
     engines: {node: '>=16.20.0'}
     cpu: [arm64]
     os: [darwin]
 
-  '@tsc-rs/darwin-x64@0.8.0':
-    resolution: {integrity: sha512-FFFoxnJwszgsM/u4XLH2FB0mzqg+TCCvy+NPCL6fYZv3sbJjoekB4w5gw8Esg9/IPjHbV1rBqNlXYnyCiKYkkQ==}
+  '@tsrs/darwin-x64@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-7WUGrCYqz94dRpSTungOh90LL/5NhhnLQrMQqRYvmirHcp1sRlcVziJ2w+cynKwQ81/I2UajsNiKho/YSObcyA==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [darwin]
 
-  '@tsc-rs/linux-arm64@0.8.0':
-    resolution: {integrity: sha512-mo8qBCCgvMv7jYJrYSbHjc5CBVkzMQiJFOVF6oL4nP7sp/QjywskFZwUduw8Yn1MX83fR1zbJbhAkKtlwRZ3hg==}
+  '@tsrs/linux-arm64-gnu@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-bNWkz4lu+bOzl+sl9btE4pQ0RbLkv0Zm4FE2oKvBrt56vCnl7khcAcsqpSxBXApOkp5OwvyyY+XuOGuROBt7yg==}
     engines: {node: '>=16.20.0'}
     cpu: [arm64]
     os: [linux]
+    libc: [glibc]
 
-  '@tsc-rs/linux-x64@0.8.0':
-    resolution: {integrity: sha512-c1DPPfJ6F8HkScESepl42p4Cph8BcKcd3dBakYLBPyWiKZD8q3bw/kDNoAQoTnO3k8Zkv5FFbI85ot4y6gNQuA==}
+  '@tsrs/linux-arm64-musl@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-TwvKTiOD8Fwb3HB+CrhnpYgKf7He1BobtjefTja0iGAzDtfaiGwoF06zLUdmey27kmCmxjBPybS45VRyZBkQnQ==}
+    engines: {node: '>=16.20.0'}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@tsrs/linux-x64-gnu@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-0OAYWOp33xHJbY/zwowbq4IKg1aCzD98sb2ksZb/1um2l28HYhJyhMEEsNczLpUFipQDE+zVBNkFoBML/KRNvA==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [linux]
+    libc: [glibc]
 
-  '@tsc-rs/win32-arm64@0.8.0':
-    resolution: {integrity: sha512-JNycrZs0LcZ8Rx1+Ik3z9R7YkNIKE2ZQjWKmI6os3EpGrMpfSztFYhbuI0whiZpFfL0AqaVu4o0F1+oR0Z8YDQ==}
+  '@tsrs/linux-x64-musl@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-OtYmWa1tzjSt/bXxotPBrPrzlfZqz+azkkfotmuYMQfxiOgmRRm7cl022iV4lE21EOUicqp0NAnuDGDLfDlNBg==}
     engines: {node: '>=16.20.0'}
-    cpu: [arm64]
-    os: [win32]
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
 
-  '@tsc-rs/win32-x64@0.8.0':
-    resolution: {integrity: sha512-oWSjfTaOhdZjC8C0gJoa/LdF4TiH729UHKUYm7t2mvdBtPoC85NxvhTIC8ZFjaKs+bvzZ6uMOi8N2EWK2LCV3Q==}
+  '@tsrs/win32-x64@0.21.0-ts7.1.0-beta':
+    resolution: {integrity: sha512-ITwz3wOx161DNwEC4qYrrRwWgQyZQR4Os/GA3g67dKml0CQ4LPWHXniCzXrMagwYyH2vBBhPYT+7o+bKDj0qtA==}
     engines: {node: '>=16.20.0'}
     cpu: [x64]
     os: [win32]
@@ -861,8 +871,8 @@ packages:
     resolution: {integrity: sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw==}
     engines: {node: '>=8'}
 
-  tsc-rs@0.8.0:
-    resolution: {integrity: sha512-W8S1FKujMD7PDEWFdC/SmoT8uUgY7VEdUi0rcSbUNux5beVSVMFm0EaW4BkFJklZFgFEbDyNALcQpUEldDCvLQ==}
+  tsrs@0.21.0-ts7.1.0-beta:
+    resolution: {integrity: sha512-4aafVQhCMlJ9Qhjm3wT/a0o21HO7ajTDA6cSCnP4PVNU1fhQ2rTXLxJxEbhonz969Hh8s+dYOlFpaO4GoJMzDA==}
     engines: {node: '>=16.20.0'}
     hasBin: true
 
@@ -1069,22 +1079,25 @@ snapshots:
       - debug
       - supports-color
 
-  '@tsc-rs/darwin-arm64@0.8.0':
+  '@tsrs/darwin-arm64@0.21.0-ts7.1.0-beta':
     optional: true
 
-  '@tsc-rs/darwin-x64@0.8.0':
+  '@tsrs/darwin-x64@0.21.0-ts7.1.0-beta':
     optional: true
 
-  '@tsc-rs/linux-arm64@0.8.0':
+  '@tsrs/linux-arm64-gnu@0.21.0-ts7.1.0-beta':
     optional: true
 
-  '@tsc-rs/linux-x64@0.8.0':
+  '@tsrs/linux-arm64-musl@0.21.0-ts7.1.0-beta':
     optional: true
 
-  '@tsc-rs/win32-arm64@0.8.0':
+  '@tsrs/linux-x64-gnu@0.21.0-ts7.1.0-beta':
     optional: true
 
-  '@tsc-rs/win32-x64@0.8.0':
+  '@tsrs/linux-x64-musl@0.21.0-ts7.1.0-beta':
+    optional: true
+
+  '@tsrs/win32-x64@0.21.0-ts7.1.0-beta':
     optional: true
 
   acorn@8.18.0: {}
@@ -1475,14 +1488,15 @@ snapshots:
     dependencies:
       has-flag: 4.0.0
 
-  tsc-rs@0.8.0:
+  tsrs@0.21.0-ts7.1.0-beta:
     optionalDependencies:
-      '@tsc-rs/darwin-arm64': 0.8.0
-      '@tsc-rs/darwin-x64': 0.8.0
-      '@tsc-rs/linux-arm64': 0.8.0
-      '@tsc-rs/linux-x64': 0.8.0
-      '@tsc-rs/win32-arm64': 0.8.0
-      '@tsc-rs/win32-x64': 0.8.0
+      '@tsrs/darwin-arm64': 0.21.0-ts7.1.0-beta
+      '@tsrs/darwin-x64': 0.21.0-ts7.1.0-beta
+      '@tsrs/linux-arm64-gnu': 0.21.0-ts7.1.0-beta
+      '@tsrs/linux-arm64-musl': 0.21.0-ts7.1.0-beta
+      '@tsrs/linux-x64-gnu': 0.21.0-ts7.1.0-beta
+      '@tsrs/linux-x64-musl': 0.21.0-ts7.1.0-beta
+      '@tsrs/win32-x64': 0.21.0-ts7.1.0-beta
 
   tsx@4.23.15:
     dependencies:

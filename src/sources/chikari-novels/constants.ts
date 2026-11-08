@@ -8,7 +8,7 @@ export const CHAPTER_PAGE_LIMIT = 500;
 export const PREF_SHOW_18 = "pref_18_mode";
 export const PREF_EXCLUDE_GENRES = "pref_exclude_genres";
 
-/** Fallback genres; the live list comes from `/api/novels/genres`. */
+/** Fallback genres; the live list comes from `/api/genres?novels=true`. */
 export const GENRE_OPTIONS: LabeledOption[] = [
   { id: "action", title: "Action" },
   { id: "adventure", title: "Adventure" },

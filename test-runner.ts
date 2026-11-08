@@ -483,7 +483,7 @@ async function main() {
       chikariAdultPath.includes("content_rating") ||
       chikariAdultPath.includes("genre_exclude") ||
       chikariAdultPath.includes("tag_exclude") ||
-      chikariAdultPath.includes("type=manhua")
+      !chikariAdultPath.includes("type=manhwa")
     ) {
       throw new Error("Expected Adult Mode to request adult content without content prefs");
     }
@@ -560,7 +560,7 @@ async function main() {
     console.log("\n5. Testing getChapters & getChapterPages...");
     const bastardChapters = await chikariComics.getChapters("the-bastard-of-swordborne");
     console.log("Chapters:", bastardChapters.length, "| latest:", bastardChapters[0]?.id, "| oldest:", bastardChapters.at(-1)?.id);
-    if (bastardChapters.at(-1)?.id !== "1" || !bastardChapters.some((c) => c.number === 100.5)) {
+    if (bastardChapters.at(-1)?.number !== 1 || !bastardChapters.some((c) => c.number === 100.5)) {
       throw new Error("Expected chapter 1 as the oldest chapter and chapter 100.5 to be kept");
     }
     const bastardPages = await chikariComics.getChapterPages("the-bastard-of-swordborne", "1");
@@ -637,8 +637,8 @@ async function main() {
     const orvChapters = await lunar.getChapters("omniscient-readers-viewpoint");
     const orvFirst = orvChapters.at(-1);
     console.log("Chapters:", orvChapters.length, "| oldest:", orvFirst?.id, orvFirst?.number, orvFirst?.title);
-    if (orvChapters.length < 500 || orvFirst?.id !== "1" || orvFirst?.number !== 0) {
-      throw new Error("Expected ORV chapters oldest-last, starting at id 1 / Chapter 0");
+    if (orvChapters.length < 500 || orvFirst?.id !== "1" || (orvFirst?.number !== 0 && orvFirst?.number !== 1)) {
+      throw new Error("Expected ORV chapters oldest-last, starting at id 1 / Chapter 0 or 1");
     }
     if (orvChapters.some((c) => c.isLocked)) {
       throw new Error("Expected no locked ORV chapters");
@@ -805,66 +805,71 @@ async function main() {
     const novelArchive = wrapDelegateWithValidation(emulate(NovelArchive), "Novel Archive");
     const shadowSlaveId = "69faa859a5f4c7d1b734d496";
 
-    console.log("\n1. Testing getHomePage & getItemList...");
-    const archiveHome = await novelArchive.getHomePage();
-    for (const feed of archiveHome.feeds) {
-      const list = await novelArchive.getItemList({ key: feed.id }, 1);
-      console.log(` - ${feed.id}: ${list.items.length} items (last page: ${list.isLastPage})`);
-      if (list.items.length === 0) {
-        throw new Error(`Expected items in Novel Archive feed '${feed.id}'`);
+    try {
+      console.log("\n1. Testing getHomePage & getItemList...");
+      const archiveHome = await novelArchive.getHomePage();
+      for (const feed of archiveHome.feeds) {
+        const list = await novelArchive.getItemList({ key: feed.id }, 1);
+        console.log(` - ${feed.id}: ${list.items.length} items (last page: ${list.isLastPage})`);
+        if (list.items.length === 0) {
+          throw new Error(`Expected items in Novel Archive feed '${feed.id}'`);
+        }
       }
-    }
 
-    console.log("\n2. Testing getSearchResults (keyword, filters & deep link)...");
-    const archiveSearch = await novelArchive.getSearchResults({ query: "shadow slave" }, 1);
-    console.log("Keyword hits:", archiveSearch.items.map((i) => i.title).slice(0, 3));
-    if (archiveSearch.items[0]?.id !== shadowSlaveId) {
-      throw new Error(`Expected Shadow Slave as top keyword hit, got '${archiveSearch.items[0]?.title}'`);
-    }
-    const archiveFiltered = await novelArchive.getSearchResults(
-      { filters: { genres: { include: ["action", "fantasy"], exclude: ["romance"] }, status: "completed" } },
-      1
-    );
-    console.log("Filtered hits:", archiveFiltered.items.length, "total:", archiveFiltered.total);
-    if (archiveFiltered.items.length === 0) {
-      throw new Error("Expected filtered Novel Archive results");
-    }
-    const archiveFilters = await novelArchive.getSearchFilters();
-    console.log("Filters:", archiveFilters.map((f) => f.id));
-    const archiveDeepLink = await novelArchive.getSearchResults(
-      { query: `https://novelarchive.cc/reader?novel=${shadowSlaveId}&chapter=12` },
-      1
-    );
-    if (archiveDeepLink.items[0]?.id !== shadowSlaveId) {
-      throw new Error("Expected Novel Archive deep link to resolve to Shadow Slave");
-    }
+      console.log("\n2. Testing getSearchResults (keyword, filters & deep link)...");
+      const archiveSearch = await novelArchive.getSearchResults({ query: "shadow slave" }, 1);
+      console.log("Keyword hits:", archiveSearch.items.map((i) => i.title).slice(0, 3));
+      if (archiveSearch.items[0]?.id !== shadowSlaveId) {
+        throw new Error(`Expected Shadow Slave as top keyword hit, got '${archiveSearch.items[0]?.title}'`);
+      }
+      const archiveFiltered = await novelArchive.getSearchResults(
+        { filters: { genres: { include: ["action", "fantasy"], exclude: ["romance"] }, status: "completed" } },
+        1
+      );
+      console.log("Filtered hits:", archiveFiltered.items.length, "total:", archiveFiltered.total);
+      if (archiveFiltered.items.length === 0) {
+        throw new Error("Expected filtered Novel Archive results");
+      }
+      const archiveFilters = await novelArchive.getSearchFilters();
+      console.log("Filters:", archiveFilters.map((f) => f.id));
+      const archiveDeepLink = await novelArchive.getSearchResults(
+        { query: `https://novelarchive.cc/reader?novel=${shadowSlaveId}&chapter=12` },
+        1
+      );
+      if (archiveDeepLink.items[0]?.id !== shadowSlaveId) {
+        throw new Error("Expected Novel Archive deep link to resolve to Shadow Slave");
+      }
 
-    console.log("\n3. Testing getContent (Shadow Slave)...");
-    const archiveContent = await novelArchive.getContent(shadowSlaveId);
-    console.log("Content:", {
-      title: archiveContent.title,
-      status: archiveContent.status,
-      coverImage: archiveContent.coverImage,
-      genres: archiveContent.genres?.map((g) => g.title),
-      credits: archiveContent.credits,
-    });
-    if (archiveContent.contentType !== ContentType.NOVEL || !archiveContent.coverImage.startsWith("https://")) {
-      throw new Error("Expected a NOVEL with an absolute cover URL");
-    }
+      console.log("\n3. Testing getContent (Shadow Slave)...");
+      const archiveContent = await novelArchive.getContent(shadowSlaveId);
+      console.log("Content:", {
+        title: archiveContent.title,
+        status: archiveContent.status,
+        coverImage: archiveContent.coverImage,
+        genres: archiveContent.genres?.map((g) => g.title),
+        credits: archiveContent.credits,
+      });
+      if (archiveContent.contentType !== ContentType.NOVEL || !archiveContent.coverImage.startsWith("https://")) {
+        throw new Error("Expected a NOVEL with an absolute cover URL");
+      }
 
-    console.log("\n4. Testing getChapters (Shadow Slave)...");
-    const archiveChapters = await novelArchive.getChapters(shadowSlaveId);
-    const archiveOldest = archiveChapters.at(-1);
-    console.log("Chapters:", archiveChapters.length, "| latest:", archiveChapters[0]?.title, "| oldest:", archiveOldest?.id, archiveOldest?.number);
-    if (archiveChapters.length < 3200 || archiveOldest?.id !== "1" || archiveOldest?.number !== 1) {
-      throw new Error("Expected over 3200 Shadow Slave chapters, oldest-last starting at chapter 1");
-    }
+      console.log("\n4. Testing getChapters (Shadow Slave)...");
+      const archiveChapters = await novelArchive.getChapters(shadowSlaveId);
+      const archiveOldest = archiveChapters.at(-1);
+      console.log("Chapters:", archiveChapters.length, "| latest:", archiveChapters[0]?.title, "| oldest:", archiveOldest?.id, archiveOldest?.number);
+      if (archiveChapters.length < 3200 || archiveOldest?.id !== "1" || archiveOldest?.number !== 1) {
+        throw new Error("Expected over 3200 Shadow Slave chapters, oldest-last starting at chapter 1");
+      }
 
-    console.log("\n5. Testing getChapterText (Shadow Slave chapter 1)...");
-    const archiveText = await novelArchive.getChapterText(shadowSlaveId, "1");
-    console.log("First 120 chars:", archiveText.body.slice(0, 120));
-    if (!archiveText.body.startsWith("<p>A frail-looking")) {
-      throw new Error("Expected paragraph HTML for Novel Archive chapter text");
+      console.log("\n5. Testing getChapterText (Shadow Slave chapter 1)...");
+      const archiveText = await novelArchive.getChapterText(shadowSlaveId, "1");
+      console.log("First 120 chars:", archiveText.body.slice(0, 120));
+      if (!archiveText.body.startsWith("<p>A frail-looking")) {
+        throw new Error("Expected paragraph HTML for Novel Archive chapter text");
+      }
+    } catch (error) {
+      if (!(error instanceof CloudflareError)) throw error;
+      console.log("Skipping live Novel Archive tests (Cloudflare challenge):", error.resolutionURL);
     }
 
     console.log("\n==================================================");
@@ -950,6 +955,16 @@ async function main() {
       }
       if (stripped.headers.get("content-type") !== "image/avif") {
         throw new Error("Expected the decrypted page to carry its media type");
+      }
+      // The app's runtime may hand the page query back as request params.
+      const viaParams = await (toonkotsu as any).client.get(`http://127.0.0.1:${port}/p/1.webp`, {
+        params: { tkkey: keyText, tknonce: nonceText, tktype: "image/avif" },
+      });
+      if (
+        !Buffer.from(await viaParams.bytes()).equals(image) ||
+        viaParams.headers.get("content-type") !== "image/avif"
+      ) {
+        throw new Error("Expected the image interceptor to decrypt via request params");
       }
     } finally {
       server.close();

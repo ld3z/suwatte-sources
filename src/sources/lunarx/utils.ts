@@ -35,6 +35,14 @@ export function parseCount(value: unknown): number | undefined {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
 }
 
+/** Waits if the runtime provides timers; otherwise resolves immediately. */
+export function wait(ms: number): Promise<void> {
+  const setTimer = (globalThis as any).setTimeout;
+  return typeof setTimer === "function"
+    ? new Promise((resolve) => setTimer(resolve, ms))
+    : Promise.resolve();
+}
+
 export function nonEmpty<T>(values: T[]): T[] | undefined {
   return values.length > 0 ? values : undefined;
 }

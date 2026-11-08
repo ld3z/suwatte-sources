@@ -58,7 +58,10 @@ import {
   VolumeItem,
   VolumesResponse,
 } from "./types";
-import { parseCount } from "./utils";
+import { parseCount, wait } from "./utils";
+
+const MAX_SERVER_ERROR_RETRIES = 2;
+const SERVER_ERROR_RETRY_DELAY_MS = 2000;
 
 export default class LunarX implements Delegate {
   static info: SourceInfo = info;
@@ -266,24 +269,30 @@ export default class LunarX implements Delegate {
     const isVolume = chapterId.startsWith("vol-");
     const num = isVolume ? chapterId.replace(/^vol-/, "") : chapterId;
 
-    try {
-      const data = await this.getJson<ProviderChapterResponse>(
-        `/api/novels?slug=${encodeURIComponent(contentId)}&chapter=${encodeURIComponent(num)}`
-      );
-      const chapter = data.chapter;
-      const body =
-        chapter && chapter.chapter_title !== "Error fetching chapter" && chapter.content
-          ? toChapterHtml(chapter.content)
-          : "";
-      if (body) {
-        return {
-          format: SourceChapterTextFormat.HTML,
-          body,
-          resources: [],
-        };
+    // The mirror intermittently answers "Error fetching chapter" or a 5xx for readable chapters.
+    for (let attempt = 0; attempt <= MAX_SERVER_ERROR_RETRIES; attempt++) {
+      if (attempt > 0) await wait(SERVER_ERROR_RETRY_DELAY_MS * attempt);
+      try {
+        const data = await this.getJson<ProviderChapterResponse>(
+          `/api/novels?slug=${encodeURIComponent(contentId)}&chapter=${encodeURIComponent(num)}`
+        );
+        const chapter = data.chapter;
+        const body =
+          chapter && chapter.chapter_title !== "Error fetching chapter" && chapter.content
+            ? toChapterHtml(chapter.content)
+            : "";
+        if (body) {
+          return {
+            format: SourceChapterTextFormat.HTML,
+            body,
+            resources: [],
+          };
+        }
+        if (chapter?.chapter_title !== "Error fetching chapter") break;
+      } catch (error) {
+        const status = (error as any)?.response?.status;
+        if (typeof status !== "number" || status < 500) break;
       }
-    } catch {
-      // Fall through to unavailable error
     }
 
     if (isVolume) {
@@ -322,14 +331,20 @@ export default class LunarX implements Delegate {
     }
   }
 
-  private async fetchChapterTitles(slug: string): Promise<string[]> {
+  /** The mirror answers 502 while it warms up a novel's chapter list, so server errors are retried. */
+  private async fetchChapterTitles(slug: string, attempt = 0): Promise<string[]> {
     try {
       const data = await this.getJson<{ titles?: string[] }>(
         `/api/novels/chapter-titles?slug=${encodeURIComponent(slug)}`
       );
       return data.titles ?? [];
-    } catch {
-      return [];
+    } catch (error) {
+      const status = (error as any)?.response?.status;
+      if (typeof status !== "number" || status < 500 || attempt >= MAX_SERVER_ERROR_RETRIES) {
+        return [];
+      }
+      await wait(SERVER_ERROR_RETRY_DELAY_MS * (attempt + 1));
+      return this.fetchChapterTitles(slug, attempt + 1);
     }
   }
 

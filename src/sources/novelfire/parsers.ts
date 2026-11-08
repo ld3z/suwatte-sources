@@ -211,6 +211,17 @@ function parseDateTime(value?: string): Date | undefined {
 
 // ============================== Chapter Text ==============================
 
+/** Returns the target of a script-only `window.location.href = "..."` redirect page, if any. */
+export function parseScriptRedirect(html: string): string | null {
+  const match = html.match(/window\.location\.href\s*=\s*"((?:[^"\\]|\\.)+)"/);
+  if (!match) return null;
+  try {
+    return JSON.parse(`"${match[1]}"`);
+  } catch {
+    return null;
+  }
+}
+
 /** Returns the chapter body as HTML, or null if the page has no chapter text. */
 export function parseChapterText(html: string): string | null {
   const $ = load(html);

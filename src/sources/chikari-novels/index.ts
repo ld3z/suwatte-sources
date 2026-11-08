@@ -117,11 +117,11 @@ export default class Chikari implements Delegate {
     }
 
     const [genreOptions, tagOptions] = await Promise.all([
-      this.fetchOptions<ChikariGenre>("/api/novels/genres", (g) => ({
+      this.fetchOptions<ChikariGenre>("/api/genres?novels=true", (g) => ({
         id: g.slug,
         title: g.name,
       })),
-      this.fetchOptions<ChikariTag>("/api/novels/tags", (t) => ({
+      this.fetchOptions<ChikariTag>("/api/tags?novels=true", (t) => ({
         id: String(t.id),
         title: t.name,
       })),

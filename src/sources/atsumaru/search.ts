@@ -1,6 +1,6 @@
 import { PagedItemList, SearchRequest } from "@suwatte/toolchain";
 
-import { BROWSE_LIMIT } from "./constants";
+import { BROWSE_LIMIT, CONTENT_RATING_OPTIONS } from "./constants";
 import { toItem } from "./parsers";
 import { allowedContentRatings, Preferences } from "./settings";
 import { AtsumaruSearchResponse } from "./types";
@@ -114,9 +114,13 @@ function buildFilterBy(request: SearchRequest, prefs: Preferences): string[] {
     filterBy.push("isAdult:=false");
   }
 
-  filterBy.push(
-    `(mbContentRating:=[${backtickList(allowedRatings)}] || mbContentRating:!=*)`
+  // Typesense rejects `!=*`; `!=` also keeps titles without a rating.
+  const disallowedRatings = CONTENT_RATING_OPTIONS.map((o) => o.id).filter(
+    (rating) => !allowedRatings.includes(rating)
   );
+  if (disallowedRatings.length > 0) {
+    filterBy.push(`mbContentRating:!=[${backtickList(disallowedRatings)}]`);
+  }
   filterBy.push("medium:!=[`Novel`]");
   filterBy.push("views:>0");
 

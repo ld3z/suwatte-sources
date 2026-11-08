@@ -393,12 +393,12 @@ export default class Toonkotsu implements Delegate {
    * Decrypts page images whose URL (or page context) carries a key and nonce.
    * The key travels in both places: the page context is the clean channel, and
    * the URL query is the fallback for Suwatte's validation, which strips the
-   * context from `ChapterPage` results.
+   * context from `ChapterPage` results. The app's runtime may hand that query
+   * back as request params rather than in the request URL.
    */
   private async decryptPageResponse(response: HttpResponse): Promise<HttpResponse> {
-    const request = response.request;
-    const key = readPageParam(request.context?.[PAGE_KEY], request.url, "tkkey");
-    const nonce = readPageParam(request.context?.[PAGE_NONCE], request.url, "tknonce");
+    const key = readPageParam(response, "tkkey", PAGE_KEY);
+    const nonce = readPageParam(response, "tknonce", PAGE_NONCE);
     if (key === undefined || nonce === undefined) return response;
     if (!response.ok) {
       throw new Error(`Could not load Toonkotsu page (status ${response.status}).`);
@@ -415,7 +415,7 @@ export default class Toonkotsu implements Delegate {
     }
     // The reader serves encrypted pages as application/octet-stream; label the
     // body with the page's media type once it is readable again.
-    const mime = readPageParam(undefined, request.url, "tktype");
+    const mime = readPageParam(response, "tktype");
     if (mime !== undefined) {
       return response.rebuild({ body: decrypted, headers: { "content-type": mime } });
     }
@@ -424,14 +424,26 @@ export default class Toonkotsu implements Delegate {
 }
 
 /** Reads a page-material query parameter, preferring a context value. */
-function readPageParam(fromContext: unknown, url: string, name: string): string | undefined {
+function readPageParam(
+  response: HttpResponse,
+  name: string,
+  contextKey?: string
+): string | undefined {
+  const { context, params, url } = response.request;
+  const fromContext = contextKey ? context?.[contextKey] : undefined;
   if (typeof fromContext === "string") return fromContext;
-  const match = new RegExp(`(?:^|[?&])${name}=([^&]*)`).exec(url);
-  try {
-    return match ? decodeURIComponent(match[1]) : undefined;
-  } catch {
-    return undefined;
+  const fromParams = params?.[name];
+  if (typeof fromParams === "string") return fromParams;
+  for (const candidate of [url, response.url]) {
+    const match = new RegExp(`[?&]${name}=([^&#]*)`).exec(candidate ?? "");
+    if (!match) continue;
+    try {
+      return decodeURIComponent(match[1]);
+    } catch {
+      return undefined;
+    }
   }
+  return undefined;
 }
 
 async function readLimit(response: HttpResponse): Promise<ReaderLimit | undefined> {

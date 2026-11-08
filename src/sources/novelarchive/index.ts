@@ -53,6 +53,7 @@ export default class NovelArchive implements Delegate {
 
   client = new HttpClient({
     baseUrl: `${BASE_URL}/api`,
+    cloudflareResolutionURL: BASE_URL,
     rateLimit: {
       permits: 3,
       period: 1,

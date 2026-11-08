@@ -18,7 +18,7 @@ export interface ListOptions {
 }
 
 /**
- * Builds a `/api/novels` path. `adult=true` returns only NSFW novels and
+ * Builds a `/api/series?type=novel` path. `adult=true` returns only NSFW novels and
  * omitting it returns only SFW ones, which is what Adult Mode relies on.
  */
 export function buildListPath(
@@ -32,6 +32,7 @@ export function buildListPath(
   ]);
 
   const query = buildQueryString({
+    type: "novel",
     sort: options.sort,
     q: options.query?.trim() || undefined,
     adult: prefs.showAdult ? "true" : undefined,
@@ -44,7 +45,7 @@ export function buildListPath(
     limit: BROWSE_LIMIT,
     offset: (page - 1) * BROWSE_LIMIT,
   });
-  return `/api/novels?${query}`;
+  return `/api/series?${query}`;
 }
 
 /** Search uses the same list endpoint so filters, sorting, and paging all apply. */

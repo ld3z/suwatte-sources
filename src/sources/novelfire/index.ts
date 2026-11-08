@@ -39,6 +39,7 @@ import {
   parseContent,
   parseLastChapterPage,
   parseListing,
+  parseScriptRedirect,
 } from "./parsers";
 import { buildSearchPath, searchResultsScope } from "./search";
 import { wait } from "./utils";
@@ -176,7 +177,10 @@ export default class NovelFire implements Delegate {
     contentId: string,
     chapterId: string
   ): Promise<SourceChapterText> {
-    const html = await this.fetchHtml(`/book/${contentId}/${chapterId}`);
+    let html = await this.fetchHtml(`/book/${contentId}/${chapterId}`);
+    // Chapter pages may bounce to a mirror domain through a script redirect.
+    const redirect = parseChapterText(html) ? null : parseScriptRedirect(html);
+    if (redirect) html = await this.fetchHtml(redirect);
     const body = parseChapterText(html);
     if (!body) {
       throw new ChapterUnavailableError(`Chapter text unavailable: ${bookUrl(contentId)}/${chapterId}`);

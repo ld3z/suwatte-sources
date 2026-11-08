@@ -88,9 +88,8 @@ function buildFilterBy(request: SearchRequest, showAdult: boolean): string[] {
     filterBy.push("isAdult:=false");
   }
 
-  filterBy.push(
-    "(mbContentRating:=[`Safe`,`Suggestive`,`Erotica`] || mbContentRating:!=*)"
-  );
+  // Typesense rejects `!=*`; `!=` also keeps titles without a rating.
+  filterBy.push("mbContentRating:!=[`Pornographic`]");
   filterBy.push("views:>0");
 
   return filterBy;

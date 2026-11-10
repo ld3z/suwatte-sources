@@ -24,9 +24,10 @@ export const LIST_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export const PREF_HIDDEN_TAGS = "pref_hidden_tags";
 export const PREF_TITLE_DISPLAY = "pref_title_display";
-export const PREF_API_KEY = "pref_api_key";
-export const PREF_USE_ACCOUNT_BLACKLIST = "pref_use_account_blacklist";
-export const SECURE_API_KEY = "nhentai_api_key";
+// TODO: Revisit account / API key support later
+// export const PREF_API_KEY = "pref_api_key";
+// export const PREF_USE_ACCOUNT_BLACKLIST = "pref_use_account_blacklist";
+// export const SECURE_API_KEY = "nhentai_api_key";
 
 export interface LanguageDefinition {
   name: string;
@@ -176,7 +177,7 @@ export const FEEDS: { id: string; title: string }[] = [
   { id: "popular", title: "Popular All Time" },
 ];
 
-export const FAVORITES_FEED = { id: "favorites", title: "Favorites" };
+// export const FAVORITES_FEED = { id: "favorites", title: "Favorites" };
 
 export const UPLOADED_ANY = "any";
 

@@ -26,7 +26,7 @@ import {
   BASE_URL,
   CATEGORY_OPTIONS,
   CDN_TTL_MS,
-  FAVORITES_FEED,
+  // FAVORITES_FEED,
   FEEDS,
   LANGUAGE_OPTIONS,
   LIST_CACHE_TTL_MS,
@@ -118,10 +118,10 @@ export default class Nhentai implements Delegate {
   // =============================== Home Page ===============================
 
   async getHomePage(): Promise<HomePage> {
-    const prefs = await loadPreferences();
-    const feeds = prefs.apiKey ? [...FEEDS, FAVORITES_FEED] : FEEDS;
+    // const prefs = await loadPreferences();
+    // const feeds = prefs.apiKey ? [...FEEDS, FAVORITES_FEED] : FEEDS;
     return {
-      feeds: feeds.map((feed) => ({
+      feeds: FEEDS.map((feed) => ({
         id: feed.id,
         title: feed.title,
         content: {
@@ -138,9 +138,9 @@ export default class Nhentai implements Delegate {
     page: number
   ): Promise<PagedItemList> {
     const key = request.key ?? "";
-    if (key === FAVORITES_FEED.id) {
-      return this.fetchFavorites(page);
-    }
+    // if (key === FAVORITES_FEED.id) {
+    //   return this.fetchFavorites(page);
+    // }
     if (key.startsWith(QUERY_LIST_PREFIX)) {
       const parsed = parseQueryString(key.slice(QUERY_LIST_PREFIX.length));
       return this.executeQuery(parsed, sortById(request.sort?.key), page);
@@ -295,46 +295,43 @@ export default class Nhentai implements Delegate {
     if (effective.kind === "all") {
       response =
         sort === "date"
-          ? await this.fetchList("/galleries", { page }, prefs.apiKey)
-          : await this.fetchList(
-              "/search",
-              { query: "*", sort, page },
-              prefs.apiKey
-            );
+          ? await this.fetchList("/galleries", { page })
+          : await this.fetchList("/search", { query: "*", sort, page });
     } else if (effective.kind === "singleTag") {
       const tagKey = `${effective.term.ns}:${effective.term.value}`;
       const tagId = this.tagIds.get(tagKey);
       response =
         tagId !== undefined
-          ? await this.fetchList(
-              "/galleries/tagged",
-              { tag_id: tagId, sort, page },
-              prefs.apiKey
-            )
-          : await this.fetchList(
-              "/search",
-              { query: effective.query, sort, page },
-              prefs.apiKey
-            );
+          ? await this.fetchList("/galleries/tagged", {
+              tag_id: tagId,
+              sort,
+              page,
+            })
+          : await this.fetchList("/search", {
+              query: effective.query,
+              sort,
+              page,
+            });
     } else {
-      response = await this.fetchList(
-        "/search",
-        { query: effective.query, sort, page },
-        prefs.apiKey
-      );
+      response = await this.fetchList("/search", {
+        query: effective.query,
+        sort,
+        page,
+      });
     }
 
     return this.toPagedList(response, page, prefs, cdn);
   }
 
-  private async fetchFavorites(page: number): Promise<PagedItemList> {
-    const [prefs, cdn] = await Promise.all([loadPreferences(), this.cdnConfig()]);
-    if (!prefs.apiKey) {
-      throw new Error("Configure an nhentai API key in Settings to view Favorites.");
-    }
-    const response = await this.fetchList("/favorites", { page }, prefs.apiKey);
-    return this.toPagedList(response, page, prefs, cdn);
-  }
+  // TODO: Revisit account / API key support later
+  // private async fetchFavorites(page: number): Promise<PagedItemList> {
+  //   const [prefs, cdn] = await Promise.all([loadPreferences(), this.cdnConfig()]);
+  //   if (!prefs.apiKey) {
+  //     throw new Error("Configure an nhentai API key in Settings to view Favorites.");
+  //   }
+  //   const response = await this.fetchList("/favorites", { page });
+  //   return this.toPagedList(response, page, prefs, cdn);
+  // }
 
   private toPagedList(
     response: NhentaiPaginatedResponse,
@@ -381,20 +378,15 @@ export default class Nhentai implements Delegate {
 
   private async fetchList(
     path: string,
-    params: Record<string, string | number>,
-    apiKey: string | null
+    params: Record<string, string | number>
   ): Promise<NhentaiPaginatedResponse> {
-    const cacheKey = JSON.stringify([path, params, !!apiKey]);
+    const cacheKey = JSON.stringify([path, params]);
     const cached = this.listCache.get(cacheKey);
     if (cached && Date.now() - cached.fetchedAt < LIST_CACHE_TTL_MS) {
       return cached.data;
     }
 
-    const data = await this.requestJson<NhentaiPaginatedResponse>(
-      path,
-      params,
-      apiKey
-    );
+    const data = await this.requestJson<NhentaiPaginatedResponse>(path, params);
     this.listCache.set(cacheKey, { data, fetchedAt: Date.now() });
     trim(this.listCache, LIST_CACHE_SIZE);
     return data;
@@ -409,14 +401,12 @@ export default class Nhentai implements Delegate {
       return cached;
     }
 
-    const prefs = await loadPreferences();
     const params: Record<string, string> = includeRelated
       ? { include: "related" }
       : {};
     const gallery = await this.requestJson<NhentaiGalleryDetail>(
       `/galleries/${encodeURIComponent(id)}`,
       params,
-      prefs.apiKey,
       `Gallery ${id} is no longer available on nhentai.`
     );
 
@@ -438,7 +428,7 @@ export default class Nhentai implements Delegate {
       return cached.config;
     }
     try {
-      const data = await this.requestJson<CdnConfig>("/cdn", {}, null);
+      const data = await this.requestJson<CdnConfig>("/cdn", {});
       if (
         Array.isArray(data.image_servers) &&
         data.image_servers.length > 0 &&
@@ -457,13 +447,13 @@ export default class Nhentai implements Delegate {
   private async requestJson<T>(
     path: string,
     params: Record<string, string | number>,
-    apiKey: string | null,
     notFoundMessage?: string
   ): Promise<T> {
     const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers["Authorization"] = `Key ${apiKey}`;
-    }
+    // TODO: Revisit account / API key support later
+    // if (apiKey) {
+    //   headers["Authorization"] = `Key ${apiKey}`;
+    // }
 
     let response = await this.client.get(path, {
       params,
@@ -476,7 +466,9 @@ export default class Nhentai implements Delegate {
         response.headers.get("retry-after") ?? "3",
         10
       );
-      const delayMs = Math.min(Math.max(Number.isFinite(retryAfter) ? retryAfter : 3, 1), 10) * 1000;
+      const delayMs =
+        Math.min(Math.max(Number.isFinite(retryAfter) ? retryAfter : 3, 1), 10) *
+        1000;
       await sleep(delayMs);
       response = await this.client.get(path, {
         params,
@@ -486,15 +478,15 @@ export default class Nhentai implements Delegate {
     }
 
     if (response.status === 404) {
-      throw new Error(notFoundMessage ?? "Requested resource was not found on nhentai.");
-    }
-    if (response.status === 401) {
-      throw new Error("Invalid or revoked nhentai API key. Check your Settings.");
-    }
-    if (response.status === 429) {
       throw new Error(
-        "nhentai rate limit reached. Wait a moment or add an API key in Settings for higher limits."
+        notFoundMessage ?? "Requested resource was not found on nhentai."
       );
+    }
+    // if (response.status === 401) {
+    //   throw new Error("Invalid or revoked nhentai API key. Check your Settings.");
+    // }
+    if (response.status === 429) {
+      throw new Error("nhentai rate limit reached. Please wait a moment.");
     }
     if (!response.ok) {
       throw new Error(`nhentai API request failed (${response.status}).`);

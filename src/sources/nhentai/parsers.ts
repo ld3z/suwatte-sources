@@ -212,10 +212,10 @@ function collectSocialLinks(tags: NhentaiTag[]): WebLink[] {
 
 export function isListItemVisible(
   item: NhentaiListItem,
-  prefs: Preferences,
+  _prefs: Preferences,
   hiddenTagIds?: Set<number>
 ): boolean {
-  if (prefs.useAccountBlacklist && item.blacklisted) return false;
+  // if (_prefs.useAccountBlacklist && item.blacklisted) return false;
   if (hiddenTagIds?.size && item.tag_ids?.some((id) => hiddenTagIds.has(id))) {
     return false;
   }
@@ -324,7 +324,7 @@ export function toContent(
 
   const relatedItems = (gallery.related ?? [])
     .filter((item) =>
-      prefs ? isListItemVisible(item, prefs, hiddenTagIds) : !item.blacklisted
+      prefs ? isListItemVisible(item, prefs, hiddenTagIds) : true
     )
     .map((item) => toItem(item, variantLanguage, cdn, titleDisplay));
 

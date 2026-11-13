@@ -146,7 +146,8 @@ function parseCard($: ReturnType<typeof load>, el: any): ParsedListingCard | nul
   const title = decodeEntities(rawTitle);
   if (!title) return null;
 
-  const imgEl = $card.find(".inner_thumb img, img").first();
+  // Prefer `.inner_thumb img` only — a bare `img` match picks the language flag first.
+  const imgEl = $card.find(".inner_thumb img").first();
   const coverImage = readImgUrl(imgEl);
 
   const category =

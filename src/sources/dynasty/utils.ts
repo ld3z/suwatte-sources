@@ -7,13 +7,16 @@ export function absoluteUrl(url: string): string {
   return url;
 }
 
-/** Builds a query string; array values become repeated keys (`classes[]=Series&classes[]=Doujin`). */
+/** Builds a query string; array values become repeated bracketed keys (`classes%5B%5D=Series`). */
 export function buildQueryString(
   params: Record<string, string | number | boolean | string[] | undefined | null>
 ): string {
   return Object.entries(params)
     .flatMap(([key, value]) =>
-      (Array.isArray(value) ? value : [value]).map((v) => [key, v] as const)
+      (Array.isArray(value) ? value : [value]).map((v) => [
+        Array.isArray(value) ? `${key}[]` : key,
+        v,
+      ] as const)
     )
     .filter(([, value]) => value !== undefined && value !== null && value !== "")
     .map(
@@ -35,6 +38,14 @@ export function nonEmpty<T>(values: T[]): T[] | undefined {
 /** Appends `?page=` to a listing path; page 1 keeps the bare path. */
 export function withPage(path: string, page: number): string {
   return page > 1 ? `${path}${path.includes("?") ? "&" : "?"}page=${page}` : path;
+}
+
+/**
+ * Release covers only ship in `thumbnail` (used on cards) and `medium`
+ * (the largest variant); rewrite card thumbnails to the medium file.
+ */
+export function upgradeCover(url: string): string {
+  return url.replace(/\/covers\/thumbnail\.jpg$/, "/covers/medium.jpg");
 }
 
 const MONTHS: Record<string, number> = {

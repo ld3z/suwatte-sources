@@ -7,6 +7,7 @@ import {
   Content,
   Delegate,
   HomePage,
+  Item,
   ItemListRequest,
   PagedItemList,
   SearchFilter,
@@ -20,7 +21,9 @@ import {
 import { BASE_URL, CLASS_OPTIONS, FEEDS, SORT_OPTIONS } from "./constants";
 import { info } from "./info";
 import {
+  contentPath,
   parseContentId,
+  parseCoverFromPage,
   parseDeepLinkId,
   parseEntryList,
   parseHomepage,
@@ -82,9 +85,9 @@ export default class Dynasty implements Delegate {
         ? withPage(feed.path, page)
         : buildSearchPath({ sort: feed.sort }, page)
     );
-    return feed.parseEntries
-      ? parseEntryList(html)
-      : parseHomepage(html);
+    if (!feed.parseEntries) return parseHomepage(html);
+    const list = parseEntryList(html);
+    return { ...list, items: await this.withCovers(list.items) };
   }
 
   // =============================== Search ==================================
@@ -128,9 +131,10 @@ export default class Dynasty implements Delegate {
       }
     }
 
-    return parseEntryList(
+    const list = parseEntryList(
       await this.fetchHtml(searchPathFromRequest(request, page))
     );
+    return { ...list, items: await this.withCovers(list.items) };
   }
 
   // =========================== Content Details =============================
@@ -175,6 +179,26 @@ export default class Dynasty implements Delegate {
   }
 
   // =============================== Helpers =================================
+
+  /**
+   * Entry rows carry no images, so each item's cover is read from its own
+   * page. Failures leave the item coverless instead of dropping it.
+   */
+  private async withCovers(items: Item[]): Promise<Item[]> {
+    return Promise.all(
+      items.map(async (item) => {
+        try {
+          const cover = parseCoverFromPage(
+            await this.fetchHtml(contentPath(item.id)),
+            item.id
+          );
+          return cover ? { ...item, coverImage: cover } : item;
+        } catch {
+          return item;
+        }
+      })
+    );
+  }
 
   private async fetchHtml(path: string): Promise<string> {
     const response = await this.client.get(path);

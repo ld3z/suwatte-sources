@@ -24,6 +24,7 @@ import {
   parseReleaseDate,
   seriesSlugFromChapterSlug,
   splitChapterLabel,
+  upgradeCover,
 } from "./utils";
 
 type Query = ReturnType<typeof load>;
@@ -48,8 +49,13 @@ export function parseContentId(contentId: string): {
 }
 
 export function contentUrl(contentId: string): string {
+  return `${BASE_URL}${contentPath(contentId)}`;
+}
+
+/** Site path behind a content id (`series/<slug>` → `/series/<slug>`). */
+export function contentPath(contentId: string): string {
   const { kind, slug } = parseContentId(contentId);
-  return `${BASE_URL}/${kind === "chapter" ? "chapters" : kind}/${slug}`;
+  return `/${kind === "chapter" ? "chapters" : kind}/${slug}`;
 }
 
 /** Content id behind a listing/deep-link href; serialized chapters map to their series. */
@@ -166,7 +172,8 @@ export function parseHomepage(html: string): PagedItemList {
       title: split.title,
       subtitle: split.chapter,
       coverImage:
-        absoluteUrl($(el).find("img").first().attr("src") ?? "") || undefined,
+        upgradeCover(absoluteUrl($(el).find("img").first().attr("src") ?? "")) ||
+        undefined,
       webUrl: seriesHref
         ? `${BASE_URL}/series/${seriesHref}`
         : `${BASE_URL}/chapters/${chapterHref}`,
@@ -239,9 +246,13 @@ function parseStatus(text: string): ContentStatus {
 export function parseTagPageContent(html: string, contentId: string): Content {
   const $ = load(html);
   const heading = $("h2.tag-title").first();
-  const title =
-    heading.find("b").first().text().replace(/\s+/g, " ").trim() ||
-    parseContentId(contentId).slug;
+  let title = heading.find("b").first().text().replace(/\s+/g, " ").trim();
+  if (!title) {
+    // Franchise pages use a breadcrumb heading: "Doujins › Hell Maiden".
+    const crumbs = $("h2").first().text().replace(/\s+/g, " ").trim();
+    title = crumbs.split("›").pop()?.trim() || "";
+  }
+  title = title || parseContentId(contentId).slug;
 
   const credits = heading
     .find("a[href*='/authors/']")
@@ -458,4 +469,17 @@ export function parseStandaloneChapter(
     },
     pages,
   };
+}
+
+/** Cover image for any content id, parsed from its own page. */
+export function parseCoverFromPage(
+  html: string,
+  contentId: string
+): string | undefined {
+  const { kind, slug } = parseContentId(contentId);
+  const cover =
+    kind === "chapter"
+      ? parseStandaloneChapter(html, slug).content.coverImage
+      : parseTagPageContent(html, contentId).coverImage;
+  return cover || undefined;
 }

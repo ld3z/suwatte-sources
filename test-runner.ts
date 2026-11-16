@@ -31,7 +31,9 @@ import {
   parseReleaseDate,
   seriesSlugFromChapterSlug,
   splitChapterLabel,
+  upgradeCover,
 } from "./src/sources/dynasty/utils";
+import { buildSearchPath as buildDynastySearchPath } from "./src/sources/dynasty/search";
 import { aesGcmDecrypt, decryptPageList } from "./src/sources/yaoime/crypto";
 import {
   parseChapterLabel,
@@ -1315,6 +1317,18 @@ async function main() {
     ) {
       throw new Error("Expected Dynasty chapter labels to parse numbers and titles");
     }
+    const dynastySearchPath = buildDynastySearchPath({ query: "Blue Monday" }, 1);
+    if (
+      !dynastySearchPath.includes("classes%5B%5D=Series") ||
+      !dynastySearchPath.includes("classes%5B%5D=Doujin")
+    ) {
+      throw new Error("Expected Dynasty search to send bracketed classes[] params");
+    }
+    if (upgradeCover("https://dynasty-scans.com/system/releases/000/001/covers/thumbnail.jpg")
+      .endsWith("/covers/medium.jpg") === false
+    ) {
+      throw new Error("Expected Dynasty release covers to upgrade to medium");
+    }
 
     const dynastySeriesFixture = `
       <h2 class='tag-title'><b>Some Prefer Nettles</b> by <a href="/authors/touma">Touma</a> <small>&mdash; Ongoing</small></h2>
@@ -1377,6 +1391,13 @@ async function main() {
     ) {
       throw new Error("Expected Dynasty tag page chapters newest-first with volumes");
     }
+    const dynastyFranchise = parseTagPageContent(
+      `<h2>Doujins &rsaquo; Hell Maiden</h2><div class='tag-tags'></div>`,
+      "doujins/hell_maiden"
+    );
+    if (dynastyFranchise.title !== "Hell Maiden") {
+      throw new Error("Expected Dynasty franchise pages to title from the breadcrumb");
+    }
 
     const dynastyHomeFixture = `
       <div class='row'>
@@ -1408,7 +1429,8 @@ async function main() {
       dynastyHomeItems.items[0].id !== "series/some_prefer_nettles" ||
       dynastyHomeItems.items[0].title !== "Some Prefer Nettles" ||
       dynastyHomeItems.items[0].subtitle !== "But I Didn't Want to Bother You." ||
-      !dynastyHomeItems.items[0].coverImage?.startsWith("https://dynasty-scans.com/") ||
+      dynastyHomeItems.items[0].coverImage !==
+        "https://dynasty-scans.com/system/releases/000/048/757/covers/medium.jpg" ||
       dynastyHomeItems.items[1].id !== "chapter/pocky_day" ||
       dynastyHomeItems.isLastPage
     ) {
@@ -1494,6 +1516,9 @@ async function main() {
       if (list.items.some((item) => !item.webUrl?.startsWith("https://dynasty-scans.com/"))) {
         throw new Error(`Expected absolute webUrls in Dynasty feed '${feed.id}'`);
       }
+      if (!list.items.some((item) => item.coverImage)) {
+        throw new Error(`Expected covers in Dynasty feed '${feed.id}'`);
+      }
     }
 
     console.log("\n3. Testing getSearchResults (keyword, filters & deep link)...");
@@ -1501,6 +1526,16 @@ async function main() {
     console.log("Keyword hits:", dynastySearch.items.slice(0, 3).map((i) => ({ id: i.id, title: i.title })));
     if (dynastySearch.items.length === 0 || dynastySearch.isLastPage) {
       throw new Error("Expected paged Dynasty keyword results");
+    }
+    if (!dynastySearch.items.some((item) => item.coverImage)) {
+      throw new Error("Expected covers on Dynasty search results");
+    }
+    const dynastyBlueMonday = await dynasty.getSearchResults(
+      { query: "Blue Monday" },
+      1
+    );
+    if (!dynastyBlueMonday.items.some((item) => item.id === "series/blue_monday")) {
+      throw new Error("Expected 'Blue Monday' series results from Dynasty search");
     }
     const dynastyDoujins = await dynasty.getSearchResults(
       { filters: { classes: { include: ["Doujin"], exclude: [] } } },

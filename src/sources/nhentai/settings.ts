@@ -1,26 +1,25 @@
-import { UIForm, UIPicker, UITextField } from "@suwatte/toolchain";
-// import type { STTStore } from "@suwatte/toolchain";
-// import { UIToggle } from "@suwatte/toolchain";
+import type { STTStore } from "@suwatte/toolchain";
+import { UIForm, UIPicker, UITextField, UIToggle } from "@suwatte/toolchain";
 
 import {
-  // PREF_API_KEY,
+  PREF_API_KEY,
   PREF_HIDDEN_TAGS,
   PREF_TITLE_DISPLAY,
-  // PREF_USE_ACCOUNT_BLACKLIST,
-  // SECURE_API_KEY,
+  PREF_USE_ACCOUNT_BLACKLIST,
+  SECURE_API_KEY,
   TITLE_DISPLAY_OPTIONS,
   TitleDisplay,
 } from "./constants";
 
-// declare const SecureStore: STTStore;
+/** Provided by the app and the emulator, but not declared by the toolchain typings. */
+declare const SecureStore: STTStore;
 
 export interface Preferences {
   /** Lowercased hidden tag terms, e.g. `yaoi`, `big breasts`, `artist:crimson`. */
   hiddenTags: string[];
   titleDisplay: TitleDisplay;
-  // TODO: Revisit account / API key support later
-  // apiKey: string | null;
-  // useAccountBlacklist: boolean;
+  apiKey: string | null;
+  useAccountBlacklist: boolean;
 }
 
 const NAMESPACE_ALIASES: Record<string, string> = {
@@ -72,23 +71,29 @@ function parseTitleDisplay(value: string | null | undefined): TitleDisplay {
   return "english";
 }
 
+/** Reads the API key from the app's secure storage. */
+export async function loadApiKey(): Promise<string | null> {
+  const apiKey = await SecureStore.string(SECURE_API_KEY);
+  return apiKey?.trim() || null;
+}
+
+/** Removes the stored API key. */
+export async function clearApiKey(): Promise<void> {
+  await SecureStore.remove(SECURE_API_KEY);
+}
+
 export async function loadPreferences(): Promise<Preferences> {
-  const [
-    hiddenTags,
-    titleDisplay,
-    // apiKey,
-    // useAccountBlacklist,
-  ] = await Promise.all([
+  const [hiddenTags, titleDisplay, apiKey, useAccountBlacklist] = await Promise.all([
     ObjectStore.string(PREF_HIDDEN_TAGS),
     ObjectStore.string(PREF_TITLE_DISPLAY),
-    // SecureStore.string(SECURE_API_KEY),
-    // ObjectStore.boolean(PREF_USE_ACCOUNT_BLACKLIST),
+    loadApiKey(),
+    ObjectStore.boolean(PREF_USE_ACCOUNT_BLACKLIST),
   ]);
   return {
     hiddenTags: parseHiddenTags(hiddenTags),
     titleDisplay: parseTitleDisplay(titleDisplay),
-    // apiKey: apiKey?.trim() || null,
-    // useAccountBlacklist: useAccountBlacklist ?? true,
+    apiKey,
+    useAccountBlacklist: useAccountBlacklist ?? true,
   };
 }
 
@@ -116,29 +121,28 @@ export function buildSettingsForm(prefs: Preferences): UIForm {
           }),
         ],
       },
-      // TODO: Revisit account / API key support later
-      // {
-      //   header: "Account (Optional)",
-      //   footer: prefs.apiKey
-      //     ? "API key configured. Clear the API Key field and save to remove it."
-      //     : "Generate an API key at nhentai.net/user/settings#apikeys for higher rate limits, the Favorites feed, and account blacklist support.",
-      //   views: [
-      //     UITextField({
-      //       id: PREF_API_KEY,
-      //       title: "API Key",
-      //       placeholder: "Paste key from nhentai.net/user/settings#apikeys",
-      //       isSecure: true,
-      //       defaultValue: "",
-      //       currentValue: prefs.apiKey ?? "",
-      //     }),
-      //     UIToggle({
-      //       id: PREF_USE_ACCOUNT_BLACKLIST,
-      //       title: "Hide Account Blacklisted Galleries",
-      //       defaultValue: true,
-      //       currentValue: prefs.useAccountBlacklist,
-      //     }),
-      //   ],
-      // },
+      {
+        header: "Account (Optional)",
+        footer: prefs.apiKey
+          ? "API key configured. Clear the API Key field and save to remove it."
+          : "Generate an API key at nhentai.net/user/settings#apikeys for higher rate limits, the Favorites feed, and account blacklist support.",
+        views: [
+          UITextField({
+            id: PREF_API_KEY,
+            title: "API Key",
+            placeholder: "Paste key from nhentai.net/user/settings#apikeys",
+            isSecure: true,
+            defaultValue: "",
+            currentValue: prefs.apiKey ?? "",
+          }),
+          UIToggle({
+            id: PREF_USE_ACCOUNT_BLACKLIST,
+            title: "Hide Account Blacklisted Galleries",
+            defaultValue: true,
+            currentValue: prefs.useAccountBlacklist,
+          }),
+        ],
+      },
     ],
   };
 }
@@ -155,19 +159,18 @@ export async function savePreferences(data: Record<string, unknown>): Promise<vo
   ) {
     await ObjectStore.set(PREF_TITLE_DISPLAY, titleDisplay);
   }
-  // TODO: Revisit account / API key support later
-  // if (typeof data[PREF_API_KEY] === "string") {
-  //   const trimmed = data[PREF_API_KEY].trim().replace(/^Key\s+/i, "").trim();
-  //   if (trimmed) {
-  //     await SecureStore.set(SECURE_API_KEY, trimmed);
-  //   } else {
-  //     await SecureStore.remove(SECURE_API_KEY);
-  //   }
-  // }
-  // if (typeof data[PREF_USE_ACCOUNT_BLACKLIST] === "boolean") {
-  //   await ObjectStore.set(
-  //     PREF_USE_ACCOUNT_BLACKLIST,
-  //     data[PREF_USE_ACCOUNT_BLACKLIST]
-  //   );
-  // }
+  if (typeof data[PREF_API_KEY] === "string") {
+    const trimmed = data[PREF_API_KEY].trim().replace(/^Key\s+/i, "").trim();
+    if (trimmed) {
+      await SecureStore.set(SECURE_API_KEY, trimmed);
+    } else {
+      await SecureStore.remove(SECURE_API_KEY);
+    }
+  }
+  if (typeof data[PREF_USE_ACCOUNT_BLACKLIST] === "boolean") {
+    await ObjectStore.set(
+      PREF_USE_ACCOUNT_BLACKLIST,
+      data[PREF_USE_ACCOUNT_BLACKLIST]
+    );
+  }
 }

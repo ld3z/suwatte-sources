@@ -1898,9 +1898,37 @@ async function main() {
       pref_title_display: "english",
     });
     const nhentaiSettings = await nhentai.getSettingsPage();
-    if (nhentaiSettings?.sections.length !== 1) {
-      throw new Error("Expected Content section in nhentai settings");
+    if (
+      nhentaiSettings?.sections.length !== 2 ||
+      nhentaiSettings.sections[0].header !== "Content" ||
+      nhentaiSettings.sections[1].header !== "Account (Optional)" ||
+      !(nhentaiSettings.sections[1].views[0] as any).textfield?.props?.isSecure
+    ) {
+      throw new Error("Expected Content and Account sections in nhentai settings");
     }
+
+    console.log("2b. Testing nhentai API key settings & Favorites feed gating...");
+    await nhentai.onFormSubmitted("account", {
+      pref_api_key: "Key test-api-key",
+      pref_use_account_blacklist: true,
+    });
+    const keyedSettings = await nhentai.getSettingsPage();
+    if ((keyedSettings.sections[1].views[0] as any).textfield.props.currentValue !== "test-api-key") {
+      throw new Error("Expected nhentai API key to be stored in secure storage");
+    }
+    const keyedHome = await nhentai.getHomePage();
+    if (!keyedHome.feeds.some((f) => f.id === "favorites")) {
+      throw new Error("Expected Favorites feed when an API key is configured");
+    }
+    await nhentai.onFormSubmitted("account", {
+      pref_api_key: "",
+      pref_use_account_blacklist: true,
+    });
+    const clearedHome = await nhentai.getHomePage();
+    if (clearedHome.feeds.some((f) => f.id === "favorites")) {
+      throw new Error("Expected Favorites feed to disappear after clearing the API key");
+    }
+
     const nhentaiHome = await nhentai.getHomePage();
     for (const feed of nhentaiHome.feeds) {
       const list = await nhentai.getItemList({ key: feed.id }, 1);

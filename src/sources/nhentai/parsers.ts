@@ -212,10 +212,10 @@ function collectSocialLinks(tags: NhentaiTag[]): WebLink[] {
 
 export function isListItemVisible(
   item: NhentaiListItem,
-  _prefs: Preferences,
+  prefs: Preferences,
   hiddenTagIds?: Set<number>
 ): boolean {
-  // if (_prefs.useAccountBlacklist && item.blacklisted) return false;
+  if (prefs.useAccountBlacklist && item.blacklisted) return false;
   if (hiddenTagIds?.size && item.tag_ids?.some((id) => hiddenTagIds.has(id))) {
     return false;
   }

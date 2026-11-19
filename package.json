@@ -9,7 +9,8 @@
   "scripts": {
     "test": "tsx test-runner.ts",
     "serve": "suwatte serve",
-    "build": "suwatte build"
+    "build": "suwatte build && node scripts/minify-stt.mjs",
+    "minify": "node scripts/minify-stt.mjs"
   },
   "keywords": [],
   "author": "",
@@ -29,6 +30,7 @@
     "tsrs": "7.1.0-beta.tsrs3"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "tsx": "^4.23.15"
   }
 }

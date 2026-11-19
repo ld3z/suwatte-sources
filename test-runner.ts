@@ -1894,7 +1894,8 @@ async function main() {
       "nhentai EN"
     );
     await nhentai.onFormSubmitted("reset", {
-      pref_hidden_tags: "",
+      pref_hidden_tags: { include: [], exclude: [] },
+      pref_custom_hidden_tags: "",
       pref_title_display: "english",
     });
     const nhentaiSettings = await nhentai.getSettingsPage();
@@ -1902,10 +1903,36 @@ async function main() {
       nhentaiSettings?.sections.length !== 2 ||
       nhentaiSettings.sections[0].header !== "Content" ||
       nhentaiSettings.sections[1].header !== "Account (Optional)" ||
+      !(nhentaiSettings.sections[0].views[0] as any).select?.props?.options?.length ||
       !(nhentaiSettings.sections[1].views[0] as any).textfield?.props?.isSecure
     ) {
       throw new Error("Expected Content and Account sections in nhentai settings");
     }
+    const hiddenOptions = (nhentaiSettings.sections[0].views[0] as any).select.props.options;
+    if (!hiddenOptions.some((o: any) => o.id === "yaoi" && o.title === "Yaoi")) {
+      throw new Error("Expected nhentai Hidden Tags to be a selectable list");
+    }
+
+    console.log("2c. Testing selectable Hidden Tags persistence...");
+    await nhentai.onFormSubmitted("hidden", {
+      pref_hidden_tags: { include: ["yaoi", "guro"], exclude: [] },
+      pref_custom_hidden_tags: "artist:crimson",
+    });
+    const hiddenSettings = await nhentai.getSettingsPage();
+    const hiddenView = (hiddenSettings.sections[0].views[0] as any).select.props;
+    const customView = (hiddenSettings.sections[0].views[1] as any).textfield.props;
+    if (
+      hiddenView.currentValue.include.length !== 3 ||
+      !hiddenView.currentValue.include.includes("artist:crimson") ||
+      customView.currentValue !== "artist:crimson"
+    ) {
+      throw new Error("Expected nhentai hidden tag selections to persist");
+    }
+    await nhentai.onFormSubmitted("reset", {
+      pref_hidden_tags: { include: [], exclude: [] },
+      pref_custom_hidden_tags: "",
+      pref_title_display: "english",
+    });
 
     console.log("2b. Testing nhentai API key settings & Favorites feed gating...");
     await nhentai.onFormSubmitted("account", {

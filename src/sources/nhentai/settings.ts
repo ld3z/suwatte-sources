@@ -1,22 +1,34 @@
 import type { STTStore } from "@suwatte/toolchain";
-import { UIForm, UIPicker, UITextField, UIToggle } from "@suwatte/toolchain";
+import {
+  LabeledOption,
+  UIForm,
+  UIPicker,
+  UISelect,
+  UITextField,
+  UIToggle,
+} from "@suwatte/toolchain";
 
 import {
+  HIDDEN_TAG_OPTIONS,
   PREF_API_KEY,
+  PREF_CUSTOM_HIDDEN_TAGS,
   PREF_HIDDEN_TAGS,
   PREF_TITLE_DISPLAY,
   PREF_USE_ACCOUNT_BLACKLIST,
   SECURE_API_KEY,
   TITLE_DISPLAY_OPTIONS,
   TitleDisplay,
+  humanizeHiddenTag,
 } from "./constants";
 
 /** Provided by the app and the emulator, but not declared by the toolchain typings. */
 declare const SecureStore: STTStore;
 
 export interface Preferences {
-  /** Lowercased hidden tag terms, e.g. `yaoi`, `big breasts`, `artist:crimson`. */
+  /** Effective hidden tags: selectable entries plus free-form custom entries. */
   hiddenTags: string[];
+  /** Free-form entries entered in the "Additional Hidden Tags" field. */
+  customHiddenTags: string[];
   titleDisplay: TitleDisplay;
   apiKey: string | null;
   useAccountBlacklist: boolean;
@@ -83,34 +95,67 @@ export async function clearApiKey(): Promise<void> {
 }
 
 export async function loadPreferences(): Promise<Preferences> {
-  const [hiddenTags, titleDisplay, apiKey, useAccountBlacklist] = await Promise.all([
-    ObjectStore.string(PREF_HIDDEN_TAGS),
-    ObjectStore.string(PREF_TITLE_DISPLAY),
-    loadApiKey(),
-    ObjectStore.boolean(PREF_USE_ACCOUNT_BLACKLIST),
-  ]);
+  const [hiddenTags, customHiddenTags, titleDisplay, apiKey, useAccountBlacklist] =
+    await Promise.all([
+      ObjectStore.string(PREF_HIDDEN_TAGS),
+      ObjectStore.string(PREF_CUSTOM_HIDDEN_TAGS),
+      ObjectStore.string(PREF_TITLE_DISPLAY),
+      loadApiKey(),
+      ObjectStore.boolean(PREF_USE_ACCOUNT_BLACKLIST),
+    ]);
+
+  const custom = parseHiddenTags(customHiddenTags);
   return {
-    hiddenTags: parseHiddenTags(hiddenTags),
+    hiddenTags: Array.from(new Set([...parseHiddenTags(hiddenTags), ...custom])),
+    customHiddenTags: custom,
     titleDisplay: parseTitleDisplay(titleDisplay),
     apiKey,
     useAccountBlacklist: useAccountBlacklist ?? true,
   };
 }
 
-export function buildSettingsForm(prefs: Preferences): UIForm {
+/** Builds the selectable option list, including any tags seen while browsing. */
+export function buildHiddenTagOptions(
+  prefs: Preferences,
+  discovered: LabeledOption[] = []
+): LabeledOption[] {
+  const titles = new Map<string, string>();
+  for (const option of [...HIDDEN_TAG_OPTIONS, ...discovered]) {
+    if (!titles.has(option.id)) titles.set(option.id, option.title);
+  }
+  for (const id of prefs.hiddenTags) {
+    if (!titles.has(id)) titles.set(id, humanizeHiddenTag(id));
+  }
+  return Array.from(titles, ([id, title]) => ({ id, title })).sort((a, b) =>
+    a.title.localeCompare(b.title)
+  );
+}
+
+export function buildSettingsForm(
+  prefs: Preferences,
+  discoveredTags: LabeledOption[] = []
+): UIForm {
   return {
     sections: [
       {
         header: "Content",
         footer:
-          "Hidden tags apply to browse feeds and search. Enter tag names like yaoi, futanari, netorare or namespaced entries like artist:name, group:name, parody:name.",
+          "Hidden tags apply to browse feeds and search. Pick tags from the list (which grows as you browse galleries), or enter any other tag below, e.g. artist:name, group:name, parody:name.",
         views: [
-          UITextField({
+          UISelect({
             id: PREF_HIDDEN_TAGS,
             title: "Hidden Tags",
-            placeholder: "Comma-separated, e.g. yaoi, futanari, guro",
+            options: buildHiddenTagOptions(prefs, discoveredTags),
+            exclude: false,
+            defaultValue: { include: [], exclude: [] },
+            currentValue: { include: prefs.hiddenTags, exclude: [] },
+          }),
+          UITextField({
+            id: PREF_CUSTOM_HIDDEN_TAGS,
+            title: "Additional Hidden Tags",
+            placeholder: "Comma-separated, e.g. guro, artist:crimson",
             defaultValue: "",
-            currentValue: prefs.hiddenTags.join(", "),
+            currentValue: prefs.customHiddenTags.join(", "),
           }),
           UIPicker({
             id: PREF_TITLE_DISPLAY,
@@ -148,8 +193,18 @@ export function buildSettingsForm(prefs: Preferences): UIForm {
 }
 
 export async function savePreferences(data: Record<string, unknown>): Promise<void> {
-  if (typeof data[PREF_HIDDEN_TAGS] === "string") {
-    await ObjectStore.set(PREF_HIDDEN_TAGS, data[PREF_HIDDEN_TAGS]);
+  const hiddenTags = data[PREF_HIDDEN_TAGS];
+  if (hiddenTags && typeof hiddenTags === "object") {
+    const include = (hiddenTags as { include?: string[] }).include;
+    if (Array.isArray(include)) {
+      await ObjectStore.set(PREF_HIDDEN_TAGS, include.join(", "));
+    }
+  } else if (typeof hiddenTags === "string") {
+    // Older settings forms submitted a comma-separated string.
+    await ObjectStore.set(PREF_HIDDEN_TAGS, hiddenTags);
+  }
+  if (typeof data[PREF_CUSTOM_HIDDEN_TAGS] === "string") {
+    await ObjectStore.set(PREF_CUSTOM_HIDDEN_TAGS, data[PREF_CUSTOM_HIDDEN_TAGS]);
   }
   const titleDisplay = data[PREF_TITLE_DISPLAY];
   if (

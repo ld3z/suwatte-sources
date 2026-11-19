@@ -23,6 +23,8 @@ export const CDN_TTL_MS = 60 * 60 * 1000;
 export const LIST_CACHE_TTL_MS = 2 * 60 * 1000;
 
 export const PREF_HIDDEN_TAGS = "pref_hidden_tags";
+/** Free-form tag entries that aren't in the selectable list. */
+export const PREF_CUSTOM_HIDDEN_TAGS = "pref_custom_hidden_tags";
 export const PREF_TITLE_DISPLAY = "pref_title_display";
 export const PREF_API_KEY = "pref_api_key";
 export const PREF_USE_ACCOUNT_BLACKLIST = "pref_use_account_blacklist";
@@ -150,6 +152,108 @@ export const SEEDED_TAG_IDS: [string, number][] = [
   ["language:textless", 165194],
   ...CATEGORIES.map((c): [string, number] => [`category:${c.id}`, c.tagId]),
 ];
+
+const TAG_ACRONYMS: Record<string, string> = {
+  ai: "AI",
+  bdsm: "BDSM",
+  milf: "MILF",
+  ntr: "NTR",
+};
+
+/** Human-readable label for a stored hidden-tag id (`yaoi`, `artist:crimson`). */
+export function humanizeHiddenTag(id: string): string {
+  const colon = id.indexOf(":");
+  const ns = colon > 0 ? id.slice(0, colon) : "";
+  const value = colon > 0 ? id.slice(colon + 1) : id;
+  const pretty = value
+    .replace(/_/g, " ")
+    .split(" ")
+    .map((word) =>
+      TAG_ACRONYMS[word.toLowerCase()] ?? word.replace(/\b\w/g, (c) => c.toUpperCase())
+    )
+    .join(" ");
+  if (!ns || ns === "tag") return pretty;
+  return `${ns.charAt(0).toUpperCase()}${ns.slice(1)}: ${pretty}`;
+}
+
+/** Converts a `type:name` key from the discovered-tag map to a hidden-tag id. */
+export function hiddenTagId(type: string, name: string): string {
+  return type === "tag" ? name.toLowerCase() : `${type}:${name.toLowerCase()}`;
+}
+
+/** Common nhentai tags offered in the selectable Hidden Tags setting. */
+const COMMON_HIDDEN_TAGS = [
+  "ai generated",
+  "anal",
+  "bdsm",
+  "big breasts",
+  "bondage",
+  "blowjob",
+  "body swap",
+  "comic",
+  "creampie",
+  "crossdressing",
+  "cumshot",
+  "deepthroat",
+  "double penetration",
+  "drugs",
+  "exhibitionism",
+  "femdom",
+  "footjob",
+  "full color",
+  "futanari",
+  "gangbang",
+  "greyscale",
+  "handjob",
+  "hypnosis",
+  "impregnation",
+  "lactation",
+  "lolicon",
+  "masturbation",
+  "milf",
+  "mind control",
+  "monochrome",
+  "monster",
+  "moral degradation",
+  "netorare",
+  "netorase",
+  "no text",
+  "nurse",
+  "office lady",
+  "orgasm",
+  "pantyhose",
+  "public exposure",
+  "rape",
+  "schoolgirl uniform",
+  "sextoy",
+  "shota",
+  "stockings",
+  "story arc",
+  "tentacles",
+  "textless",
+  "thighs",
+  "trap",
+  "uniform",
+  "vibrator",
+  "voyeurism",
+  "webtoon",
+  "western",
+  "yuri",
+  "yaoi",
+  "guro",
+];
+
+export const HIDDEN_TAG_OPTIONS: LabeledOption[] = Array.from(
+  new Set([
+    ...COMMON_HIDDEN_TAGS,
+    ...SEEDED_TAG_IDS.map(([key]) => {
+      const colon = key.indexOf(":");
+      return colon > 0 && key.slice(0, colon) !== "tag" ? key : key.slice(colon + 1);
+    }),
+  ])
+)
+  .sort((a, b) => a.localeCompare(b))
+  .map((id) => ({ id, title: humanizeHiddenTag(id) }));
 
 export type SortKey =
   | "date"

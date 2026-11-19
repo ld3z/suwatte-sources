@@ -7,6 +7,7 @@ import {
   Delegate,
   HomePage,
   ItemListRequest,
+  LabeledOption,
   PagedItemList,
   PickerFilter,
   SearchFilter,
@@ -28,6 +29,8 @@ import {
   CDN_TTL_MS,
   FAVORITES_FEED,
   FEEDS,
+  hiddenTagId,
+  humanizeHiddenTag,
   LANGUAGE_OPTIONS,
   LIST_CACHE_TTL_MS,
   PAGE_SIZE,
@@ -277,7 +280,8 @@ export default class Nhentai implements Delegate {
   // =============================== Settings ===============================
 
   async getSettingsPage(): Promise<UIForm> {
-    return buildSettingsForm(await loadPreferences());
+    const prefs = await loadPreferences();
+    return buildSettingsForm(prefs, this.discoveredTagOptions());
   }
 
   async onFormSubmitted(_id: string, data: Record<string, unknown>): Promise<void> {
@@ -374,6 +378,18 @@ export default class Nhentai implements Delegate {
       total,
       isLastPage: numPages <= 0 || page >= numPages || rawItems.length === 0,
     };
+  }
+
+  /** Tags discovered while browsing become selectable in the Hidden Tags setting. */
+  private discoveredTagOptions(): LabeledOption[] {
+    const options: LabeledOption[] = [];
+    for (const key of this.tagIds.keys()) {
+      const colon = key.indexOf(":");
+      if (colon <= 0) continue;
+      const id = hiddenTagId(key.slice(0, colon), key.slice(colon + 1));
+      options.push({ id, title: humanizeHiddenTag(id) });
+    }
+    return options;
   }
 
   private resolveKnownHiddenTagIds(prefs: Preferences): Set<number> {

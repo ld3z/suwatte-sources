@@ -76,7 +76,11 @@ export function formatQueryTerm(
   negative = false
 ): string {
   const clean = value.trim().toLowerCase().replace(/"/g, "");
-  const formatted = /\s/.test(clean) ? `"${clean}"` : clean;
+  // nhentai's search parser treats a bare hyphen as another operator separator:
+  // `-tag:non-h` is read as "exclude tag:non, then exclude h" and hides almost
+  // every gallery, while `-tag:"non-h"` correctly excludes only that tag.
+  // Quote any value containing characters the parser could interpret specially.
+  const formatted = /[^a-z0-9]/.test(clean) ? `"${clean}"` : clean;
   return `${negative ? "-" : ""}${ns}:${formatted}`;
 }
 

@@ -1883,6 +1883,28 @@ async function main() {
     ) {
       throw new Error(`Unexpected nhentai search query: ${JSON.stringify(nhQuery)}`);
     }
+    // Regression: nhentai's search parser reads a bare hyphen in a tag value as
+    // another operator, so `non-h` must be quoted or nearly every gallery is
+    // hidden (e.g. `-tag:non-h` -> 120k results vs 662k for `-tag:"non-h"`).
+    const hyphenHidden = buildEffectiveQuery(parseNhentaiQuery(""), "all", [
+      "non-h",
+      "category:western-non-h",
+    ]);
+    if (
+      hyphenHidden.kind !== "search" ||
+      !hyphenHidden.query.includes('-tag:"non-h"') ||
+      !hyphenHidden.query.includes('-category:"western-non-h"')
+    ) {
+      throw new Error(
+        `Expected hyphenated hidden tags to be quoted in the nhentai query, got ${JSON.stringify(hyphenHidden)}`
+      );
+    }
+    const hyphenSearch = buildEffectiveQuery(parseNhentaiQuery("tag:non-h"), "all", []);
+    if (hyphenSearch.kind !== "singleTag" || hyphenSearch.query !== 'tag:"non-h"') {
+      throw new Error(
+        `Expected hyphenated tag searches to be quoted, got ${JSON.stringify(hyphenSearch)}`
+      );
+    }
     const singleLangQuery = buildEffectiveQuery(parseNhentaiQuery(""), "english", []);
     if (singleLangQuery.kind !== "singleTag" || singleLangQuery.term.value !== "english") {
       throw new Error("Expected single-language browse without hidden tags to optimize as singleTag");

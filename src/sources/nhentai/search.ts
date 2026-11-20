@@ -291,13 +291,14 @@ export function buildEffectiveQuery(
     positive.push({ ns: "language", value: effectiveLang });
   }
 
-  const positiveKeys = new Set(positive.map((t) => `${t.ns}:${t.value}`));
   const seenNegative = new Set(negative.map((t) => `${t.ns}:${t.value}`));
 
   for (const hidden of hiddenTags) {
     const term = hiddenEntryToTerm(hidden);
     const key = `${term.ns}:${term.value}`;
-    if (!positiveKeys.has(key) && !seenNegative.has(key)) {
+    // Hidden tags are a hard blocklist. Apply them even when the very same term
+    // is searched for positively, otherwise searching a hidden tag reveals it.
+    if (!seenNegative.has(key)) {
       negative.push(term);
       seenNegative.add(key);
     }

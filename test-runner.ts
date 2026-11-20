@@ -1905,6 +1905,21 @@ async function main() {
         `Expected hyphenated tag searches to be quoted, got ${JSON.stringify(hyphenSearch)}`
       );
     }
+    // Regression: a hidden tag must stay hidden even when it is searched for.
+    const hiddenSelfSearch = buildEffectiveQuery(
+      parseNhentaiSearchRequest({ filters: { tags: "non-h" } }),
+      "english",
+      ["non-h"]
+    );
+    if (
+      hiddenSelfSearch.kind !== "search" ||
+      !hiddenSelfSearch.query.includes('tag:"non-h"') ||
+      !hiddenSelfSearch.query.includes('-tag:"non-h"')
+    ) {
+      throw new Error(
+        `Expected hidden tags to apply to searches for the same tag, got ${JSON.stringify(hiddenSelfSearch)}`
+      );
+    }
     const singleLangQuery = buildEffectiveQuery(parseNhentaiQuery(""), "english", []);
     if (singleLangQuery.kind !== "singleTag" || singleLangQuery.term.value !== "english") {
       throw new Error("Expected single-language browse without hidden tags to optimize as singleTag");

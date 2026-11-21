@@ -7,7 +7,7 @@
   },
   "main": "index.js",
   "scripts": {
-    "test": "tsx test-runner.ts",
+    "test": "tsx tests/index.ts",
     "serve": "suwatte serve",
     "build": "suwatte build && node scripts/minify-stt.mjs",
     "minify": "node scripts/minify-stt.mjs"

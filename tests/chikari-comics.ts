@@ -134,8 +134,16 @@ export async function testChikariComics(): Promise<void> {
   console.log("\n5. Testing getChapters & getChapterPages...");
   const bastardChapters = await chikariComics.getChapters("the-bastard-of-swordborne");
   console.log("Chapters:", bastardChapters.length, "| latest:", bastardChapters[0]?.id, "| oldest:", bastardChapters.at(-1)?.id);
-  if (bastardChapters.at(-1)?.number !== 1 || !bastardChapters.some((c) => c.number === 100.5)) {
-    throw new Error("Expected chapter 1 as the oldest chapter and chapter 100.5 to be kept");
+  // The site has since added a "Chapter 0" prologue, so the oldest number is
+  // data-driven instead of always 1. What matters is that numbering comes from
+  // the API (the 100.5 interlude survives) and the list stays newest-first.
+  const bastardNumbers = bastardChapters.map((c) => c.number);
+  if (
+    !bastardNumbers.includes(100.5) ||
+    !bastardNumbers.includes(1) ||
+    bastardNumbers.some((n, i) => i > 0 && n > bastardNumbers[i - 1])
+  ) {
+    throw new Error("Expected API chapter numbers (including 100.5) in newest-first order");
   }
   const bastardPages = await chikariComics.getChapterPages("the-bastard-of-swordborne", "1");
   console.log("Pages:", bastardPages.length, "| first:", bastardPages[0]?.url);

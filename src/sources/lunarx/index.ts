@@ -62,6 +62,17 @@ import { parseCount, wait } from "./utils";
 
 const MAX_SERVER_ERROR_RETRIES = 2;
 const SERVER_ERROR_RETRY_DELAY_MS = 2000;
+const MAX_RETRY_AFTER_MS = 15_000;
+
+/** Honors the mirror's Retry-After header, with a bounded fallback delay. */
+function retryDelay(error: unknown, attempt: number): number {
+  const headers = (error as any)?.response?.headers;
+  const retryAfter = Number(headers?.get?.("retry-after"));
+  if (Number.isFinite(retryAfter) && retryAfter > 0) {
+    return Math.min(retryAfter * 1000, MAX_RETRY_AFTER_MS);
+  }
+  return SERVER_ERROR_RETRY_DELAY_MS * (attempt + 1);
+}
 
 export default class LunarX implements Delegate {
   static info: SourceInfo = info;
@@ -310,6 +321,13 @@ export default class LunarX implements Delegate {
 
   private async getJson<T>(path: string): Promise<T> {
     const response = await this.client.get(path);
+    // HttpClient resolves non-2xx responses, so surface them as errors for the
+    // callers' existing retry/fallback handling instead of parsing error JSON.
+    if (!response.ok) {
+      throw Object.assign(new Error(`Lunar API request failed (${response.status})`), {
+        response,
+      });
+    }
     return response.json<T>();
   }
 
@@ -343,7 +361,7 @@ export default class LunarX implements Delegate {
       if (typeof status !== "number" || status < 500 || attempt >= MAX_SERVER_ERROR_RETRIES) {
         return [];
       }
-      await wait(SERVER_ERROR_RETRY_DELAY_MS * (attempt + 1));
+      await wait(retryDelay(error, attempt));
       return this.fetchChapterTitles(slug, attempt + 1);
     }
   }

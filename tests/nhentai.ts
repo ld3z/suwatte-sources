@@ -4,7 +4,7 @@ import { readSourceVariants } from "@suwatte/toolchain/runtime";
 import Nhentai from "../src/sources/nhentai";
 import { imageUrl as nhentaiImageUrl, thumbnailUrl as nhentaiThumbUrl } from "../src/sources/nhentai/images";
 import { cleanPrettyTitle } from "../src/sources/nhentai/parsers";
-import { buildEffectiveQuery, parseDeepLinkId as parseNhentaiLink, parseQueryString as parseNhentaiQuery, parseSearchRequest as parseNhentaiSearchRequest } from "../src/sources/nhentai/search";
+import { buildEffectiveQueries, buildEffectiveQuery, parseDeepLinkId as parseNhentaiLink, parseQueryString as parseNhentaiQuery, parseSearchRequest as parseNhentaiSearchRequest } from "../src/sources/nhentai/search";
 import { runWhenDirect } from "./support";
 
 export async function testNhentai(): Promise<void> {
@@ -115,6 +115,25 @@ export async function testNhentai(): Promise<void> {
   if (singleLangQuery.kind !== "singleTag" || singleLangQuery.term.value !== "english") {
     throw new Error("Expected single-language browse without hidden tags to optimize as singleTag");
   }
+  // Show tags are a whitelist: one query per tag, OR-ed, with hidden tags still applied.
+  const showQueries = buildEffectiveQueries(
+    parseNhentaiQuery(""),
+    "all",
+    ["yaoi"],
+    ["guro", "full color", "guro"]
+  );
+  if (
+    showQueries.length !== 2 ||
+    !showQueries.some((q) => q.query?.includes('tag:"full color"')) ||
+    !showQueries.some((q) => q.query?.includes("tag:guro")) ||
+    showQueries.some((q) => !q.query?.includes("-tag:yaoi"))
+  ) {
+    throw new Error(`Expected one hidden-filtered query per show tag, got ${JSON.stringify(showQueries)}`);
+  }
+  const singleShow = buildEffectiveQueries(parseNhentaiQuery(""), "all", [], ["guro"]);
+  if (singleShow.length !== 1 || singleShow[0].kind !== "singleTag" || singleShow[0].term.value !== "guro") {
+    throw new Error("Expected a single show tag to use the singleTag fast path");
+  }
 
   console.log("\n2. Testing feeds, search & code lookup (English variant)...");
   const nhentai = wrapDelegateWithValidation(
@@ -124,6 +143,8 @@ export async function testNhentai(): Promise<void> {
   await nhentai.onFormSubmitted("reset", {
     pref_hidden_tags: { include: [], exclude: [] },
     pref_custom_hidden_tags: "",
+    pref_show_tags: { include: [], exclude: [] },
+    pref_custom_show_tags: "",
     pref_title_display: "english",
   });
   const nhentaiSettings = await nhentai.getSettingsPage();
@@ -145,20 +166,32 @@ export async function testNhentai(): Promise<void> {
   await nhentai.onFormSubmitted("hidden", {
     pref_hidden_tags: { include: ["yaoi", "guro"], exclude: [] },
     pref_custom_hidden_tags: "artist:crimson",
+    pref_show_tags: { include: ["full color", "artist:shindol"], exclude: [] },
+    pref_custom_show_tags: "guro",
   });
   const hiddenSettings = await nhentai.getSettingsPage();
   const hiddenView = (hiddenSettings.sections[0].views[0] as any).select.props;
   const customView = (hiddenSettings.sections[0].views[1] as any).textfield.props;
+  const showView = (hiddenSettings.sections[0].views[2] as any).select.props;
+  const customShowView = (hiddenSettings.sections[0].views[3] as any).textfield.props;
   if (
     hiddenView.currentValue.include.length !== 3 ||
     !hiddenView.currentValue.include.includes("artist:crimson") ||
-    customView.currentValue !== "artist:crimson"
+    customView.currentValue !== "artist:crimson" ||
+    showView.currentValue.include.length !== 3 ||
+    !showView.currentValue.include.includes("guro") ||
+    customShowView.currentValue !== "guro"
   ) {
-    throw new Error("Expected nhentai hidden tag selections to persist");
+    throw new Error("Expected nhentai hidden and show tag selections to persist");
+  }
+  if (!showView.options.some((o: any) => o.id === "full color" && o.title === "Full Color")) {
+    throw new Error("Expected Show Tags to offer the same selectable options as Hidden Tags");
   }
   await nhentai.onFormSubmitted("reset", {
     pref_hidden_tags: { include: [], exclude: [] },
     pref_custom_hidden_tags: "",
+    pref_show_tags: { include: [], exclude: [] },
+    pref_custom_show_tags: "",
     pref_title_display: "english",
   });
 
@@ -192,6 +225,34 @@ export async function testNhentai(): Promise<void> {
       throw new Error(`Expected galleries in nhentai feed '${feed.id}'`);
     }
   }
+
+  console.log("\n2d. Testing show-only whitelist...");
+  await nhentai.onFormSubmitted("show", {
+    pref_show_tags: { include: ["yaoi"], exclude: [] },
+    pref_custom_show_tags: "",
+  });
+  const shownFeed = await nhentai.getItemList({ key: "date" }, 1);
+  if (shownFeed.items.length === 0) {
+    throw new Error("Expected galleries when a show tag is configured");
+  }
+  const shownContent = await nhentai.getContent(shownFeed.items[0].id);
+  if (!shownContent.genres?.some((tag) => (tag as any).id === "tag:yaoi")) {
+    throw new Error("Expected show-tag feed results to carry the whitelisted tag");
+  }
+  // Several show tags are OR-ed by merging one response per tag.
+  await nhentai.onFormSubmitted("show", {
+    pref_show_tags: { include: ["yaoi", "futanari"], exclude: [] },
+    pref_custom_show_tags: "",
+  });
+  const mergedFeed = await nhentai.getItemList({ key: "date" }, 1);
+  const mergedIds = mergedFeed.items.map((item) => item.id);
+  if (mergedIds.length === 0 || new Set(mergedIds).size !== mergedIds.length) {
+    throw new Error("Expected de-duplicated galleries when several show tags are set");
+  }
+  await nhentai.onFormSubmitted("reset", {
+    pref_show_tags: { include: [], exclude: [] },
+    pref_custom_show_tags: "",
+  });
 
   const nhCodeLookup = await nhentai.getSearchResults({ query: "1" }, 1);
   if (nhCodeLookup.items[0]?.id !== "1" || !nhCodeLookup.isLastPage) {

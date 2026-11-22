@@ -12,6 +12,8 @@ export const GG_TTL_MS = 20 * 60 * 1000;
 export const INDEX_VERSION_TTL_MS = 10 * 60 * 1000;
 
 export const PREF_HIDDEN_TAGS = "pref_hidden_tags";
+/** When set, only galleries with at least one of these tags are shown. */
+export const PREF_SHOW_TAGS = "pref_show_tags";
 export const PREF_HIDE_ANIME = "pref_hide_anime";
 export const PREF_IMAGE_FORMAT = "pref_image_format";
 

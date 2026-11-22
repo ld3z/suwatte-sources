@@ -213,10 +213,16 @@ function collectSocialLinks(tags: NhentaiTag[]): WebLink[] {
 export function isListItemVisible(
   item: NhentaiListItem,
   prefs: Preferences,
-  hiddenTagIds?: Set<number>
+  hiddenTagIds?: Set<number>,
+  showTagIds?: Set<number>,
+  hasShowTags = false
 ): boolean {
   if (prefs.useAccountBlacklist && item.blacklisted) return false;
   if (hiddenTagIds?.size && item.tag_ids?.some((id) => hiddenTagIds.has(id))) {
+    return false;
+  }
+  // A configured whitelist with no resolvable ids must not let anything through.
+  if (hasShowTags && (!showTagIds?.size || !item.tag_ids?.some((id) => showTagIds.has(id)))) {
     return false;
   }
   return true;
@@ -228,7 +234,8 @@ export function toContent(
   variantLanguage: string,
   cdn: CdnConfig = DEFAULT_CDN,
   prefs?: Preferences,
-  hiddenTagIds?: Set<number>
+  hiddenTagIds?: Set<number>,
+  showTagIds?: Set<number>
 ): Content {
   const titleDisplay = prefs?.titleDisplay ?? "english";
   const primaryTitle = selectDetailTitle(gallery.title, titleDisplay, contentId);
@@ -324,7 +331,15 @@ export function toContent(
 
   const relatedItems = (gallery.related ?? [])
     .filter((item) =>
-      prefs ? isListItemVisible(item, prefs, hiddenTagIds) : true
+      prefs
+        ? isListItemVisible(
+            item,
+            prefs,
+            hiddenTagIds,
+            showTagIds,
+            prefs.showTags.length > 0
+          )
+        : true
     )
     .map((item) => toItem(item, variantLanguage, cdn, titleDisplay));
 

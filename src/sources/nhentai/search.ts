@@ -330,6 +330,42 @@ export function buildEffectiveQuery(
 }
 
 /**
+ * Show tags form a whitelist: a gallery must carry at least one of them. Since
+ * nhentai's search has no OR operator, each tag becomes its own query and the
+ * results are merged by the delegate. Existing filters (and hidden tags) are
+ * applied to every query.
+ */
+export function buildEffectiveQueries(
+  parsed: ParsedQuery,
+  variantLanguage: string,
+  hiddenTags: string[] = [],
+  showTags: string[] = []
+): EffectiveQuery[] {
+  const shows: Term[] = [];
+  const seen = new Set(parsed.positive.map((t) => `${t.ns}:${t.value}`));
+  for (const entry of showTags) {
+    const term = hiddenEntryToTerm(entry);
+    const key = `${term.ns}:${term.value}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    shows.push(term);
+  }
+  if (!shows.length) return [buildEffectiveQuery(parsed, variantLanguage, hiddenTags)];
+  return shows.map((show) =>
+    buildEffectiveQuery(
+      {
+        positive: [...parsed.positive, show],
+        negative: [...parsed.negative],
+        rawTokens: [...parsed.rawTokens],
+        language: parsed.language,
+      },
+      variantLanguage,
+      hiddenTags
+    )
+  );
+}
+
+/**
  * Resolves a gallery ID from an nhentai URL, `#177013`, `id:177013`, `g/177013`,
  * or (when no filters are set) a bare numeric gallery code (`177013`).
  */

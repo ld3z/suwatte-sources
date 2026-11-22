@@ -25,6 +25,10 @@ export const LIST_CACHE_TTL_MS = 2 * 60 * 1000;
 export const PREF_HIDDEN_TAGS = "pref_hidden_tags";
 /** Free-form tag entries that aren't in the selectable list. */
 export const PREF_CUSTOM_HIDDEN_TAGS = "pref_custom_hidden_tags";
+/** When set, only galleries with at least one of these tags are shown. */
+export const PREF_SHOW_TAGS = "pref_show_tags";
+/** Free-form show-tag entries that aren't in the selectable list. */
+export const PREF_CUSTOM_SHOW_TAGS = "pref_custom_show_tags";
 export const PREF_TITLE_DISPLAY = "pref_title_display";
 export const PREF_API_KEY = "pref_api_key";
 export const PREF_USE_ACCOUNT_BLACKLIST = "pref_use_account_blacklist";

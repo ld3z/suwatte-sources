@@ -113,6 +113,31 @@ function addListFilter(query: ParsedQuery, value: unknown, ns: Namespace) {
   else query.positive.push(...included);
 }
 
+/**
+ * Adds a single OR group for the show-tag whitelist. Galleries must match at
+ * least one of these terms; a bare tag matches the female/male/tag namespaces,
+ * mirroring how hidden tags are matched.
+ */
+export function applyShowTags(query: ParsedQuery, showTags: string[]): ParsedQuery {
+  if (!showTags.length) return query;
+  const group: Term[] = [];
+  for (const raw of showTags) {
+    const term = toTerm(raw);
+    if (!term) continue;
+    if (!term.ns) {
+      group.push(
+        { ns: "female", value: term.value },
+        { ns: "male", value: term.value },
+        { ns: "tag", value: term.value }
+      );
+    } else {
+      group.push(term);
+    }
+  }
+  if (!group.length) return query;
+  return { ...query, anyOf: [...query.anyOf, group] };
+}
+
 export function parseSearchRequest(request: SearchRequest): ParsedQuery {
   const query = parseQueryString(request.query ?? "");
   const filters = (request.filters ?? {}) as Record<string, unknown>;

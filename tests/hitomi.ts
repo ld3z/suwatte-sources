@@ -4,7 +4,7 @@ import { readSourceVariants } from "@suwatte/toolchain/runtime";
 import Hitomi from "../src/sources/hitomi";
 import { imageIdFromHash, parseImageServerRules } from "../src/sources/hitomi/images";
 import { nozomiPath } from "../src/sources/hitomi/nozomi";
-import { parseDeepLinkId as parseHitomiLink, parseQueryString } from "../src/sources/hitomi/search";
+import { applyShowTags, parseDeepLinkId as parseHitomiLink, parseQueryString } from "../src/sources/hitomi/search";
 import { runWhenDirect } from "./support";
 
 export async function testHitomi(): Promise<void> {
@@ -58,10 +58,36 @@ export async function testHitomi(): Promise<void> {
   ) {
     throw new Error("Expected Hitomi gallery links to resolve");
   }
+  // Show tags form a single OR group; a bare tag expands over the tag namespaces.
+  const shown = applyShowTags(parseQueryString(""), ["full color", "artist:shindol"]);
+  if (
+    shown.anyOf.length !== 1 ||
+    shown.anyOf[0].length !== 4 ||
+    !shown.anyOf[0].some((t) => t.ns === "female" && t.value === "full color") ||
+    !shown.anyOf[0].some((t) => t.ns === "artist" && t.value === "shindol")
+  ) {
+    throw new Error(`Expected show tags to expand into one OR group, got ${JSON.stringify(shown)}`);
+  }
 
   console.log("\n2. Testing feeds & search (English variant)...");
   const hitomi = wrapDelegateWithValidation(emulate(Hitomi, { variantId: "en.ldez.hitomi" }), "Hitomi EN");
-  await hitomi.onFormSubmitted("reset", { pref_hidden_tags: "", pref_hide_anime: true, pref_image_format: "webp" });
+  await hitomi.onFormSubmitted("reset", {
+    pref_hidden_tags: "",
+    pref_show_tags: "",
+    pref_hide_anime: true,
+    pref_image_format: "webp",
+  });
+  const hitomiSettings = await hitomi.getSettingsPage();
+  if ((hitomiSettings.sections[0].views[1] as any).textfield.props.id !== "pref_show_tags") {
+    throw new Error("Expected Hitomi Show Tags next to Hidden Tags in settings");
+  }
+  await hitomi.onFormSubmitted("show", { pref_show_tags: "full color, artist:shindol" });
+  const savedShow = await hitomi.getSettingsPage();
+  if ((savedShow.sections[0].views[1] as any).textfield.props.currentValue !== "full color, artist:shindol") {
+    throw new Error("Expected Hitomi show tags to persist");
+  }
+  await hitomi.onFormSubmitted("reset", { pref_show_tags: "" });
+
   const hitomiHome = await hitomi.getHomePage();
   for (const feed of hitomiHome.feeds) {
     const list = await hitomi.getItemList({ key: feed.id }, 1);
@@ -70,6 +96,18 @@ export async function testHitomi(): Promise<void> {
       throw new Error(`Expected a full page of galleries in Hitomi feed '${feed.id}'`);
     }
   }
+  console.log("\n2b. Testing show-only whitelist...");
+  await hitomi.onFormSubmitted("show", { pref_show_tags: "full color" });
+  const shownList = await hitomi.getItemList({ key: "added" }, 1);
+  if (shownList.items.length === 0) {
+    throw new Error("Expected galleries when a show tag is configured");
+  }
+  const shownContent = await hitomi.getContent(shownList.items[0].id);
+  if (!shownContent.genres?.some((tag) => (tag as any).id.includes("full_color"))) {
+    throw new Error("Expected show-tag feed results to carry the whitelisted tag");
+  }
+  await hitomi.onFormSubmitted("reset", { pref_show_tags: "" });
+
   const titleSearch = await hitomi.getSearchResults({ query: "tutor" }, 1);
   console.log("Title search hits:", titleSearch.total, titleSearch.items.slice(0, 2).map((i) => i.title));
   if (titleSearch.items.length === 0) {

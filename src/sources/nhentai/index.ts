@@ -51,8 +51,9 @@ import {
   toItem,
 } from "./parsers";
 import {
+  EffectiveQuery,
   ParsedQuery,
-  buildEffectiveQuery,
+  buildEffectiveQueries,
   emptyQuery,
   hasActiveFilters,
   parseDeepLinkId,
@@ -71,6 +72,7 @@ import {
 import {
   CdnConfig,
   NhentaiGalleryDetail,
+  NhentaiListItem,
   NhentaiPaginatedResponse,
 } from "./types";
 
@@ -106,6 +108,8 @@ export default class Nhentai implements Delegate {
     { data: NhentaiPaginatedResponse; fetchedAt: number }
   >();
   private tagIds = new Map<string, number>(SEEDED_TAG_IDS);
+  /** Show-tag ids resolved via the tag endpoint; `null` means "not found". */
+  private resolvedTagIds = new Map<string, number | null>();
   private cdnState?: { config: CdnConfig; fetchedAt: number };
   /** `undefined` until loaded from secure storage; `null` when no key is set. */
   private apiKey?: string | null;
@@ -248,13 +252,15 @@ export default class Nhentai implements Delegate {
       this.cdnConfig(),
       loadPreferences(),
     ]);
+    const showTagIds = await this.resolveShowTagIds(prefs.showTags);
     return toContent(
       gallery,
       contentId,
       this.language,
       cdn,
       prefs,
-      this.resolveKnownHiddenTagIds(prefs)
+      this.resolveKnownHiddenTagIds(prefs),
+      showTagIds
     );
   }
 
@@ -304,38 +310,36 @@ export default class Nhentai implements Delegate {
     page: number
   ): Promise<PagedItemList> {
     const [prefs, cdn] = await Promise.all([loadPreferences(), this.cdnConfig()]);
-    const effective = buildEffectiveQuery(parsed, this.language, prefs.hiddenTags);
+    const effectiveQueries = buildEffectiveQueries(
+      parsed,
+      this.language,
+      prefs.hiddenTags,
+      prefs.showTags
+    );
+    const responses = await Promise.all(
+      effectiveQueries.map((effective) => this.fetchEffectivePage(effective, sort, page))
+    );
+    return this.toPagedList(mergeResponses(responses, sort), page, prefs, cdn);
+  }
 
-    let response: NhentaiPaginatedResponse;
+  private async fetchEffectivePage(
+    effective: EffectiveQuery,
+    sort: SortKey,
+    page: number
+  ): Promise<NhentaiPaginatedResponse> {
     if (effective.kind === "all") {
-      response =
-        sort === "date"
-          ? await this.fetchList("/galleries", { page })
-          : await this.fetchList("/search", { query: "*", sort, page });
-    } else if (effective.kind === "singleTag") {
+      return sort === "date"
+        ? this.fetchList("/galleries", { page })
+        : this.fetchList("/search", { query: "*", sort, page });
+    }
+    if (effective.kind === "singleTag") {
       const tagKey = `${effective.term.ns}:${effective.term.value}`;
       const tagId = this.tagIds.get(tagKey);
-      response =
-        tagId !== undefined
-          ? await this.fetchList("/galleries/tagged", {
-              tag_id: tagId,
-              sort,
-              page,
-            })
-          : await this.fetchList("/search", {
-              query: effective.query,
-              sort,
-              page,
-            });
-    } else {
-      response = await this.fetchList("/search", {
-        query: effective.query,
-        sort,
-        page,
-      });
+      if (tagId !== undefined) {
+        return this.fetchList("/galleries/tagged", { tag_id: tagId, sort, page });
+      }
     }
-
-    return this.toPagedList(response, page, prefs, cdn);
+    return this.fetchList("/search", { query: effective.query, sort, page });
   }
 
   private async fetchFavorites(page: number): Promise<PagedItemList> {
@@ -344,14 +348,17 @@ export default class Nhentai implements Delegate {
       throw new Error("Configure an nhentai API key in Settings to view Favorites.");
     }
     const response = await this.fetchList("/favorites", { page });
-    return this.toPagedList(response, page, prefs, cdn);
+    // Favorites aren't query-filtered, so apply the whitelist with tag ids here.
+    const showTagIds = await this.resolveShowTagIds(prefs.showTags);
+    return this.toPagedList(response, page, prefs, cdn, showTagIds);
   }
 
   private toPagedList(
     response: NhentaiPaginatedResponse,
     page: number,
     prefs: Preferences,
-    cdn: CdnConfig
+    cdn: CdnConfig,
+    showTagIds?: Set<number>
   ): PagedItemList {
     const perPage = response.per_page || PAGE_SIZE;
     const numPages = response.num_pages ?? 0;
@@ -359,7 +366,15 @@ export default class Nhentai implements Delegate {
     const hiddenTagIds = this.resolveKnownHiddenTagIds(prefs);
 
     const items = rawItems
-      .filter((item) => isListItemVisible(item, prefs, hiddenTagIds))
+      .filter((item) =>
+        isListItemVisible(
+          item,
+          prefs,
+          hiddenTagIds,
+          showTagIds,
+          prefs.showTags.length > 0 && showTagIds !== undefined
+        )
+      )
       .map((item) => toItem(item, this.language, cdn, prefs.titleDisplay));
 
     let total: number;
@@ -399,6 +414,46 @@ export default class Nhentai implements Delegate {
       const id = this.tagIds.get(key);
       if (id !== undefined) ids.add(id);
     }
+    return ids;
+  }
+
+  /** Resolves a `type:name` key to a tag id, falling back to the tag endpoint. */
+  private async resolveTagId(key: string): Promise<number | null> {
+    if (this.resolvedTagIds.has(key)) return this.resolvedTagIds.get(key) ?? null;
+    const known = this.tagIds.get(key);
+    if (known !== undefined) {
+      this.resolvedTagIds.set(key, known);
+      return known;
+    }
+    const colon = key.indexOf(":");
+    const type = colon > 0 ? key.slice(0, colon) : "tag";
+    const slug = (colon > 0 ? key.slice(colon + 1) : key).trim().replace(/\s+/g, "-");
+    let id: number | null = null;
+    if (slug) {
+      try {
+        const tag = await this.requestJson<{ id: number }>(
+          `/tags/${encodeURIComponent(type)}/${encodeURIComponent(slug)}`,
+          {}
+        );
+        if (typeof tag?.id === "number") id = tag.id;
+      } catch {
+        // Unknown tags simply don't match the whitelist.
+      }
+    }
+    this.resolvedTagIds.set(key, id);
+    if (id !== null) this.tagIds.set(key, id);
+    return id;
+  }
+
+  private async resolveShowTagIds(entries: string[]): Promise<Set<number>> {
+    const ids = new Set<number>();
+    await Promise.all(
+      entries.map(async (entry) => {
+        const key = entry.includes(":") ? entry : `tag:${entry}`;
+        const id = await this.resolveTagId(key);
+        if (id !== null) ids.add(id);
+      })
+    );
     return ids;
   }
 
@@ -528,6 +583,46 @@ export default class Nhentai implements Delegate {
 
     return response.json<T>();
   }
+}
+
+/**
+ * Combines one response per show tag into a single page. Show tags are OR-ed,
+ * so the same gallery can appear in several responses and must be de-duplicated.
+ */
+function mergeResponses(
+  responses: NhentaiPaginatedResponse[],
+  sort: SortKey
+): NhentaiPaginatedResponse {
+  if (responses.length === 1) return responses[0];
+  const lists = responses.map((r) => r.result ?? []);
+  const byId = new Map<number, NhentaiListItem>();
+
+  if (sort === "date") {
+    // nhentai ids grow with upload time, so date order is descending id order.
+    for (const item of lists.flat()) byId.set(item.id, item);
+    return {
+      result: [...byId.values()].sort((a, b) => b.id - a.id).slice(0, PAGE_SIZE),
+      num_pages: Math.max(0, ...responses.map((r) => r.num_pages ?? 0)),
+      per_page: PAGE_SIZE,
+      total: responses.reduce((sum, r) => sum + (r.total ?? 0), 0),
+    };
+  }
+
+  // Popularity lists have no common numeric key; interleave them by rank.
+  const longest = Math.max(0, ...lists.map((list) => list.length));
+  for (let i = 0; i < longest; i++) {
+    for (const list of lists) {
+      const item = list[i];
+      if (item && !byId.has(item.id)) byId.set(item.id, item);
+    }
+  }
+
+  return {
+    result: [...byId.values()].slice(0, PAGE_SIZE),
+    num_pages: Math.max(0, ...responses.map((r) => r.num_pages ?? 0)),
+    per_page: PAGE_SIZE,
+    total: responses.reduce((sum, r) => sum + (r.total ?? 0), 0),
+  };
 }
 
 /** Waits if the runtime provides timers; otherwise resolves immediately. */

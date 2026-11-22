@@ -40,6 +40,7 @@ import { galleryKeys, parseGalleryScript, toChapter, toContent, toItem } from ".
 import {
   ParsedQuery,
   ResolvedQuery,
+  applyShowTags,
   parseDeepLinkId,
   parseQueryString,
   parseSearchRequest,
@@ -154,11 +155,11 @@ export default class Hitomi implements Delegate {
   // =========================== Content Details ============================
 
   async getContent(contentId: string): Promise<Content> {
-    const gallery = await this.fetchGallery(contentId);
+    const [gallery, prefs] = await Promise.all([this.fetchGallery(contentId), loadPreferences()]);
     const relatedIds = (gallery.related ?? []).slice(0, RELATED_LIMIT);
-    const related = (await this.fetchGalleries(relatedIds.map(String))).map((g) =>
-      toItem(g, this.language)
-    );
+    const related = (await this.fetchGalleries(relatedIds.map(String)))
+      .filter((g) => isVisible(g, prefs, false))
+      .map((g) => toItem(g, this.language));
     return toContent(gallery, contentId, related);
   }
 
@@ -196,16 +197,18 @@ export default class Hitomi implements Delegate {
     sort: SortDefinition,
     page: number
   ): Promise<PagedItemList> {
+    const prefs = await loadPreferences();
+    const effective = applyShowTags(parsed, prefs.showTags);
     const state = {
-      language: parsed.language ?? this.language,
+      language: effective.language ?? this.language,
       orderby: sort.orderby,
       orderbykey: sort.orderbykey,
     };
-    const cacheKey = JSON.stringify([parsed, state]);
+    const cacheKey = JSON.stringify([effective, state]);
     const cached = this.searches.get(cacheKey);
     const resolved: ResolvedQuery = cached
       ? { kind: "ids", ids: cached }
-      : await resolveQuery(this.index, parsed, state);
+      : await resolveQuery(this.index, effective, state);
     if (resolved.kind === "ids" && !cached) {
       this.searches.set(cacheKey, resolved.ids);
       trim(this.searches, SEARCH_CACHE_SIZE);
@@ -220,10 +223,10 @@ export default class Hitomi implements Delegate {
       ids = resolved.ids.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     }
 
-    const prefs = await loadPreferences();
-    const wantsAnime = [...parsed.positive, ...parsed.anyOf.flat()].some(
-      (t) => t.ns === "type" && t.value === "anime"
-    );
+    const wantsAnime =
+      [...effective.positive, ...effective.anyOf.flat()].some(
+        (t) => t.ns === "type" && t.value === "anime"
+      ) || prefs.showTags.includes("type:anime");
     const galleries = await this.fetchGalleries(ids.map(String));
     return {
       items: galleries
@@ -274,9 +277,11 @@ export default class Hitomi implements Delegate {
 
 function isVisible(gallery: HitomiGallery, prefs: Preferences, wantsAnime: boolean): boolean {
   if (prefs.hideAnime && !wantsAnime && gallery.type === "anime") return false;
-  if (!prefs.hiddenTags.length) return true;
+  if (!prefs.hiddenTags.length && !prefs.showTags.length) return true;
   const keys = galleryKeys(gallery);
-  return !prefs.hiddenTags.some((tag) => keys.has(tag));
+  if (prefs.hiddenTags.some((tag) => keys.has(tag))) return false;
+  if (prefs.showTags.length && !prefs.showTags.some((tag) => keys.has(tag))) return false;
+  return true;
 }
 
 function trim<K, V>(map: Map<K, V>, size: number) {

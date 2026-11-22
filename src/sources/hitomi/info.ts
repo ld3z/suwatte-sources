@@ -4,7 +4,7 @@ import { ALL_LANGUAGES, BASE_URL, LANGUAGES } from "./constants";
 export const info: SourceInfo = {
   id: "all.ldez.hitomi",
   name: "Hitomi",
-  version: 1.0,
+  version: 1.1,
   website: BASE_URL,
   languages: LANGUAGES.map((l) => l.code),
   rating: ContentRating.MATURE,

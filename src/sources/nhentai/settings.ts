@@ -12,7 +12,9 @@ import {
   HIDDEN_TAG_OPTIONS,
   PREF_API_KEY,
   PREF_CUSTOM_HIDDEN_TAGS,
+  PREF_CUSTOM_SHOW_TAGS,
   PREF_HIDDEN_TAGS,
+  PREF_SHOW_TAGS,
   PREF_TITLE_DISPLAY,
   PREF_USE_ACCOUNT_BLACKLIST,
   SECURE_API_KEY,
@@ -29,6 +31,10 @@ export interface Preferences {
   hiddenTags: string[];
   /** Free-form entries entered in the "Additional Hidden Tags" field. */
   customHiddenTags: string[];
+  /** Effective show tags: selectable entries plus free-form custom entries. */
+  showTags: string[];
+  /** Free-form entries entered in the "Additional Show Tags" field. */
+  customShowTags: string[];
   titleDisplay: TitleDisplay;
   apiKey: string | null;
   useAccountBlacklist: boolean;
@@ -95,19 +101,24 @@ export async function clearApiKey(): Promise<void> {
 }
 
 export async function loadPreferences(): Promise<Preferences> {
-  const [hiddenTags, customHiddenTags, titleDisplay, apiKey, useAccountBlacklist] =
+  const [hiddenTags, customHiddenTags, showTags, customShowTags, titleDisplay, apiKey, useAccountBlacklist] =
     await Promise.all([
       ObjectStore.string(PREF_HIDDEN_TAGS),
       ObjectStore.string(PREF_CUSTOM_HIDDEN_TAGS),
+      ObjectStore.string(PREF_SHOW_TAGS),
+      ObjectStore.string(PREF_CUSTOM_SHOW_TAGS),
       ObjectStore.string(PREF_TITLE_DISPLAY),
       loadApiKey(),
       ObjectStore.boolean(PREF_USE_ACCOUNT_BLACKLIST),
     ]);
 
   const custom = parseHiddenTags(customHiddenTags);
+  const customShow = parseHiddenTags(customShowTags);
   return {
     hiddenTags: Array.from(new Set([...parseHiddenTags(hiddenTags), ...custom])),
     customHiddenTags: custom,
+    showTags: Array.from(new Set([...parseHiddenTags(showTags), ...customShow])),
+    customShowTags: customShow,
     titleDisplay: parseTitleDisplay(titleDisplay),
     apiKey,
     useAccountBlacklist: useAccountBlacklist ?? true,
@@ -123,7 +134,7 @@ export function buildHiddenTagOptions(
   for (const option of [...HIDDEN_TAG_OPTIONS, ...discovered]) {
     if (!titles.has(option.id)) titles.set(option.id, option.title);
   }
-  for (const id of prefs.hiddenTags) {
+  for (const id of [...prefs.hiddenTags, ...prefs.showTags]) {
     if (!titles.has(id)) titles.set(id, humanizeHiddenTag(id));
   }
   return Array.from(titles, ([id, title]) => ({ id, title })).sort((a, b) =>
@@ -140,7 +151,7 @@ export function buildSettingsForm(
       {
         header: "Content",
         footer:
-          "Hidden tags apply to browse feeds and search. Pick tags from the list (which grows as you browse galleries), or enter any other tag below, e.g. artist:name, group:name, parody:name.",
+          "Hidden tags apply to browse feeds and search. Show tags, when set, limit results to galleries carrying at least one listed tag; hidden tags still remove matches. Pick tags from either list (which grows as you browse galleries), or enter any other tag in the additional fields, e.g. artist:name, group:name, parody:name.",
         views: [
           UISelect({
             id: PREF_HIDDEN_TAGS,
@@ -156,6 +167,21 @@ export function buildSettingsForm(
             placeholder: "Comma-separated, e.g. guro, artist:crimson",
             defaultValue: "",
             currentValue: prefs.customHiddenTags.join(", "),
+          }),
+          UISelect({
+            id: PREF_SHOW_TAGS,
+            title: "Show Tags",
+            options: buildHiddenTagOptions(prefs, discoveredTags),
+            exclude: false,
+            defaultValue: { include: [], exclude: [] },
+            currentValue: { include: prefs.showTags, exclude: [] },
+          }),
+          UITextField({
+            id: PREF_CUSTOM_SHOW_TAGS,
+            title: "Additional Show Tags",
+            placeholder: "Comma-separated, e.g. yaoi, artist:crimson",
+            defaultValue: "",
+            currentValue: prefs.customShowTags.join(", "),
           }),
           UIPicker({
             id: PREF_TITLE_DISPLAY,
@@ -205,6 +231,19 @@ export async function savePreferences(data: Record<string, unknown>): Promise<vo
   }
   if (typeof data[PREF_CUSTOM_HIDDEN_TAGS] === "string") {
     await ObjectStore.set(PREF_CUSTOM_HIDDEN_TAGS, data[PREF_CUSTOM_HIDDEN_TAGS]);
+  }
+  const showTags = data[PREF_SHOW_TAGS];
+  if (showTags && typeof showTags === "object") {
+    const include = (showTags as { include?: string[] }).include;
+    if (Array.isArray(include)) {
+      await ObjectStore.set(PREF_SHOW_TAGS, include.join(", "));
+    }
+  } else if (typeof showTags === "string") {
+    // Older settings forms submitted a comma-separated string.
+    await ObjectStore.set(PREF_SHOW_TAGS, showTags);
+  }
+  if (typeof data[PREF_CUSTOM_SHOW_TAGS] === "string") {
+    await ObjectStore.set(PREF_CUSTOM_SHOW_TAGS, data[PREF_CUSTOM_SHOW_TAGS]);
   }
   const titleDisplay = data[PREF_TITLE_DISPLAY];
   if (

@@ -18,16 +18,16 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "12.21.0",
+      "version": "12.23.0",
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@12.21.0",
+  "packageManager": "pnpm@12.23.0",
   "dependencies": {
-    "@suwatte/toolchain": "^1.0.0",
+    "@suwatte/toolchain": "^1.1.0",
     "cheerio": "^1.2.0",
     "domhandler": "^6.0.1",
-    "tsrs": "7.1.0-beta.tsrs4"
+    "tsrs": "7.1.0-beta.tsrs5"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

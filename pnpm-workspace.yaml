@@ -9,12 +9,12 @@ minimumReleaseAgeExclude:
   - '@tsc-rs/win32-arm64@0.7.0 || 0.8.0'
   - '@tsc-rs/win32-x64@0.7.0 || 0.8.0'
   - tsc-rs@0.7.0 || 0.8.0
-  - '@tsrs/darwin-arm64@7.1.0-beta.tsrs4'
-  - '@tsrs/darwin-x64@7.1.0-beta.tsrs4'
-  - '@tsrs/linux-arm64-gnu@7.1.0-beta.tsrs4'
-  - '@tsrs/linux-arm64-musl@7.1.0-beta.tsrs4'
-  - '@tsrs/linux-x64-gnu@7.1.0-beta.tsrs4'
-  - '@tsrs/linux-x64-musl@7.1.0-beta.tsrs4'
-  - '@tsrs/win32-arm64@7.1.0-beta.tsrs4'
-  - '@tsrs/win32-x64@7.1.0-beta.tsrs4'
-  - tsrs@7.1.0-beta.tsrs4
+  - '@tsrs/darwin-arm64@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/darwin-x64@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/linux-arm64-gnu@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/linux-arm64-musl@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/linux-x64-gnu@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/linux-x64-musl@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/win32-arm64@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - '@tsrs/win32-x64@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5'
+  - tsrs@7.1.0-beta.tsrs4 || 7.1.0-beta.tsrs5

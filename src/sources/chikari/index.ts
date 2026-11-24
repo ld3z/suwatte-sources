@@ -184,7 +184,7 @@ export default class Chikari implements Delegate {
 
   // =============================== Chapters ===============================
 
-  /** Chapter lists are paginated (500 per page), so all pages are fetched and merged. */
+  /** Chapter lists are paginated (200 per page), so all pages are fetched and merged. */
   async getChapters(contentId: string): Promise<Chapter[]> {
     const fetchPage = async (offset: number) => {
       const response = await this.client.get(
@@ -194,10 +194,14 @@ export default class Chikari implements Delegate {
     };
 
     const first = await fetchPage(0);
-    const pageCount = Math.ceil((first.total ?? 0) / CHAPTER_PAGE_LIMIT);
+    // The server clamps `limit` and echoes the effective value back. Page with
+    // that value so long series aren't cut short if the cap changes again.
+    const limit = first.limit > 0 ? Math.min(first.limit, CHAPTER_PAGE_LIMIT) : CHAPTER_PAGE_LIMIT;
+    const total = first.total ?? first.items?.length ?? 0;
+    const pageCount = Math.ceil(total / limit);
     const rest = await Promise.all(
       Array.from({ length: Math.max(0, pageCount - 1) }, (_, i) =>
-        fetchPage((i + 1) * CHAPTER_PAGE_LIMIT)
+        fetchPage((i + 1) * limit)
       )
     );
 

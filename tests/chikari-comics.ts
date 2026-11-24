@@ -151,7 +151,28 @@ export async function testChikariComics(): Promise<void> {
     throw new Error("Expected pages for chapter 1");
   }
 
-  console.log("\n6. Testing scan groups ('the-stellar-swordmaster')...");
+  console.log("\n6. Testing chapter pagination on a long series ('overgeared')...");
+  // The chapters endpoint caps `limit` at 200; paging past the cap must still
+  // surface the oldest chapters (the API reports 350 chapters for this series).
+  const overgearedChapters = await chikariComics.getChapters("overgeared");
+  const overgearedNumbers = overgearedChapters.map((c) => c.number);
+  console.log(
+    "Chapters:",
+    overgearedChapters.length,
+    "| latest:",
+    overgearedNumbers[0],
+    "| oldest:",
+    overgearedNumbers.at(-1)
+  );
+  if (
+    overgearedChapters.length < 350 ||
+    !overgearedNumbers.includes(0) ||
+    !overgearedNumbers.includes(1)
+  ) {
+    throw new Error("Expected every page of chapters, including the oldest ones, for Overgeared");
+  }
+
+  console.log("\n7. Testing scan groups ('the-stellar-swordmaster')...");
   const stellarChapters = await chikariComics.getChapters("the-stellar-swordmaster");
   const groups = [...new Set(stellarChapters.map((c) => c.providers?.[0]?.name))];
   console.log("Chapters:", stellarChapters.length, "| groups:", groups);

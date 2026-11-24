@@ -2,8 +2,8 @@ import { LabeledOption } from "@suwatte/toolchain";
 
 export const BASE_URL = "https://chikari.moe";
 export const BROWSE_LIMIT = 40;
-/** The chapter list endpoint caps `limit` at 500. */
-export const CHAPTER_PAGE_LIMIT = 500;
+/** `/api/series/{slug}/chapters` silently caps `limit` at 200. */
+export const CHAPTER_PAGE_LIMIT = 200;
 
 export const PREF_SHOW_18 = "pref_18_mode";
 export const PREF_EXCLUDE_GENRES = "pref_exclude_genres";
